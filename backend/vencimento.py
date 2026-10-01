@@ -67,7 +67,10 @@ def _af_status_totals(af_files):
 			fecho_count = 0
 			for row in worksheet.iter_rows(min_row=2, values_only=True):
 				if len(row) > max(client_pt_column, fecho_column):
-					paid_count += row[client_pt_column] == "Não"
+					paid_count += (
+						row[client_pt_column] == "Não"
+						or row[fecho_column] == "Sim"
+					)
 					fecho_count += row[fecho_column] == "Sim"
 			total_af[(person, month)] = paid_count
 			fechos_af[(person, month)] = fecho_count

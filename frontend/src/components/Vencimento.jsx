@@ -39,7 +39,6 @@ const Vencimento = () => {
 	const [filename, setFilename] = useState('');
 	const [selectedSheet, setSelectedSheet] = useState(() => rememberedSheet);
 	const [loading, setLoading] = useState(true);
-	const [backgroundUpdating, setBackgroundUpdating] = useState(false);
 	const [error, setError] = useState('');
 	const [saving, setSaving] = useState(false);
 	const isPedroSheet = selectedSheet === 'Pedro Freitas';

@@ -264,14 +264,14 @@ def import_(filename, person):
 	if valid_rows.empty:
 		raise ValueError('O ficheiro AF não contém registos válidos.')
 
-	rows = []
-	for _, source_row in source.iterrows():
+	rows_by_member = {}
+	for _, source_row in valid_rows.iterrows():
 		member_number = _clean_value(source_row['Código'])
-		if member_number is None:
-			continue
+		member_key = _member_key(member_number)
 		evaluation_date = _clean_value(source_row['Inserida em'])
+		parsed_date = pd.to_datetime(evaluation_date, dayfirst=True, errors='coerce')
 		client_pt, fecho = _af_flags(member_number, evaluation_date, client_since)
-		rows.append([
+		row = [
 			member_number,
 			_clean_value(source_row['Cliente']),
 			_clean_value(source_row['#']),
@@ -280,7 +280,11 @@ def import_(filename, person):
 			'-',
 			client_pt,
 			fecho,
-		])
+		]
+		current = rows_by_member.get(member_key)
+		if current is None or parsed_date < current[0]:
+			rows_by_member[member_key] = (parsed_date, row)
+	rows = [row for _, row in rows_by_member.values()]
 
 	output_filename = af_filename(month, year)
 	output_path = os.path.join(BACKEND_DIR, output_filename)

@@ -66,18 +66,29 @@ const AF = () => {
 		const headers = rows[0] || [];
 		const clientPtColumn = headers.indexOf('Cliente PT');
 		const fechoColumn = headers.indexOf('Fecho');
-		const paidEvaluations = clientPtColumn < 0
-			? 0
-			: clientRows.filter((row) => row[clientPtColumn] === 'Não').length;
+		const paidEvaluations = clientRows.filter((row) => (
+			(clientPtColumn >= 0 && row[clientPtColumn] === 'Não')
+			|| (fechoColumn >= 0 && row[fechoColumn] === 'Sim')
+		)).length;
 		const fechos = fechoColumn < 0
 			? 0
 			: clientRows.filter((row) => row[fechoColumn] === 'Sim').length;
+		const percentFecho = paidEvaluations
+			? Number((fechos / paidEvaluations).toFixed(4))
+			: 0;
+		const afCommission = paidEvaluations * (
+			percentFecho < 0.1 ? 3 : percentFecho < 0.2 ? 4 : 5
+		);
+		const percentFechoDisplay = `${(
+			paidEvaluations ? (fechos / paidEvaluations) * 100 : 0
+		).toFixed(2)}%`;
 		return [
 			['Avaliações Físicas', clientRows.length],
 			['Planos de Treino', withPlan],
 			['Em Falta', clientRows.length - withPlan],
-			['Avaliações Pagas', paidEvaluations],
+			['Avaliações Pagas', `${paidEvaluations} (${afCommission.toFixed(2)}€)`],
 			['Fechos', fechos],
+			['% Fecho', percentFechoDisplay],
 		];
 	}, [rows]);
 
