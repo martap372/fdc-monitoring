@@ -105,6 +105,7 @@ def _mark_af_plans(filename, training_dates):
 				matching_dates = [
 					training_date for training_date in training_dates.get(member_number, [])
 					if training_date >= af_date - pd.Timedelta(days=1)
+					or (training_date.month == af_date.month and training_date.year == af_date.year)
 				]
 			value = min(matching_dates).strftime('%d-%m-%Y') if matching_dates else '-'
 			if cell.value != value:
