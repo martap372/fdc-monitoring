@@ -49,6 +49,13 @@ const AF = () => {
 	const [showImportDialog, setShowImportDialog] = useState(false);
 	const [pendingFile, setPendingFile] = useState(null);
 	const [selectedPerson, setSelectedPerson] = useState(PEOPLE[0]);
+	const [fechosOverride, setFechosOverride] = useState(null);
+	const [fechosDraft, setFechosDraft] = useState(null);
+	const [summaryError, setSummaryError] = useState('');
+	const [savingFechos, setSavingFechos] = useState(false);
+	const fechosEditVersion = useRef(0);
+	const activeFechosSaves = useRef(0);
+	const fechosSaveQueue = useRef(Promise.resolve());
 	useEffect(() => { rememberedMonth = selectedMonth; }, [selectedMonth]);
 	useEffect(() => { rememberedYear = selectedYear; }, [selectedYear]);
 	useEffect(() => { rememberedSheet = selectedSheet; }, [selectedSheet]);
@@ -70,15 +77,16 @@ const AF = () => {
 			(clientPtColumn >= 0 && row[clientPtColumn] === 'Não')
 			|| (fechoColumn >= 0 && row[fechoColumn] === 'Sim')
 		)).length;
-		const fechos = fechoColumn < 0
+		const calculatedFechos = fechoColumn < 0
 			? 0
 			: clientRows.filter((row) => row[fechoColumn] === 'Sim').length;
+		const fechos = fechosOverride ?? calculatedFechos;
 		const percentFecho = paidEvaluations
 			? Number((fechos / paidEvaluations).toFixed(4))
 			: 0;
-		const afCommission = paidEvaluations * (
+		const commissionPerEvaluation =
 			percentFecho < 0.1 ? 3 : percentFecho < 0.2 ? 4 : 5
-		);
+		const afCommission = paidEvaluations * commissionPerEvaluation;
 		const percentFechoDisplay = `${(
 			paidEvaluations ? (fechos / paidEvaluations) * 100 : 0
 		).toFixed(2)}%`;
@@ -89,8 +97,9 @@ const AF = () => {
 			['Avaliações Pagas', `${paidEvaluations} (${afCommission.toFixed(2)}€)`],
 			['Fechos', fechos],
 			['% Fecho', percentFechoDisplay],
+			['Valor por Avaliação', `${(paidEvaluations ? commissionPerEvaluation : 0).toFixed(0)}€`],
 		];
-	}, [rows]);
+	}, [rows, fechosOverride]);
 
 	const loadFiles = async () => {
 		const response = await fetch(`${API_URL}/api/af-files`);
@@ -125,6 +134,87 @@ const AF = () => {
 			.catch((loadError) => setError(loadError.message))
 			.finally(() => setLoading(false));
 	}, [selectedFile]);
+
+	useEffect(() => {
+		if (!selectedFile || !selectedSheet) {
+			setFechosOverride(null);
+			setFechosDraft(null);
+			return undefined;
+		}
+		let cancelled = false;
+		const loadVersion = fechosEditVersion.current;
+		setFechosOverride(null);
+		setFechosDraft(null);
+		setSummaryError('');
+		fetch(`${API_URL}/api/af-files/${encodeURIComponent(selectedFile.filename)}/fechos?sheet=${encodeURIComponent(selectedSheet)}`)
+			.then(async (response) => {
+				const result = await readJson(response);
+				if (!response.ok) throw new Error(result.error || 'Não foi possível carregar os Fechos.');
+				if (!cancelled && loadVersion === fechosEditVersion.current) {
+					setFechosOverride(result.value);
+					setFechosDraft(result.value == null ? null : String(result.value));
+				}
+			})
+			.catch((loadError) => {
+				if (!cancelled) setSummaryError(loadError.message);
+			});
+		return () => { cancelled = true; };
+	}, [selectedFile, selectedSheet]);
+
+	const persistFechos = async ({ value, filename, sheet, version }) => {
+		activeFechosSaves.current += 1;
+		setSavingFechos(true);
+		if (version === fechosEditVersion.current) setSummaryError('');
+		try {
+			const response = await fetch(
+				`${API_URL}/api/af-files/${encodeURIComponent(filename)}/fechos`,
+				{
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ sheet, value }),
+				}
+			);
+			const result = await readJson(response);
+			if (!response.ok) throw new Error(result.error || 'Não foi possível guardar os Fechos.');
+			if (
+				version === fechosEditVersion.current
+				&& selectedFile?.filename === filename
+				&& selectedSheet === sheet
+			) {
+				setFechosOverride(result.value);
+				setFechosDraft(String(result.value));
+			}
+		} catch (saveError) {
+			if (version === fechosEditVersion.current) setSummaryError(saveError.message);
+		} finally {
+			activeFechosSaves.current -= 1;
+			setSavingFechos(activeFechosSaves.current > 0);
+		}
+	};
+
+	const handleFechosInput = (value) => {
+		const version = ++fechosEditVersion.current;
+		setFechosDraft(value);
+		if (/^\d+$/.test(value)) {
+			setFechosOverride(Number(value));
+			const pending = {
+				value,
+				filename: selectedFile.filename,
+				sheet: selectedSheet,
+				version,
+			};
+			fechosSaveQueue.current = fechosSaveQueue.current.then(
+				() => persistFechos(pending),
+				() => persistFechos(pending),
+			);
+		}
+	};
+
+	const commitFechosInput = () => {
+		if (!/^\d+$/.test(fechosDraft ?? '')) {
+			setFechosDraft(String(fechosOverride ?? summaryTableData[4]?.[1] ?? 0));
+		}
+	};
 
 	const openImportDialog = () => {
 		setError('');
@@ -233,13 +323,21 @@ const AF = () => {
 								))}
 							</tbody>
 						</table>
-						<section className="pts-summary" aria-label="Resumo das avaliações físicas">
+						<section className="pts-summary af-summary" aria-label="Resumo das avaliações físicas">
 							<h2>Resumo</h2>
 							<StaticTable
+								key={`${selectedFile.filename}-${selectedSheet}`}
 								rows={summaryTableData}
 								titleColumn
 								label={`Resumo das avaliações físicas ${selectedSheet}`}
+								editableColumns={[1]}
+								editableRows={[4]}
+								inputValues={{ '4:1': fechosDraft ?? summaryTableData[4]?.[1] ?? 0 }}
+								onCellInput={handleFechosInput}
+								onCellChange={commitFechosInput}
 							/>
+							{savingFechos && <p className="pts-status">A guardar...</p>}
+							{summaryError && <p className="pts-error" role="alert">{summaryError}</p>}
 						</section>
 					</div>
 				</section>

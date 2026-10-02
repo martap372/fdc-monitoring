@@ -45,18 +45,19 @@ const PTs = () => {
 	const [importing, setImporting] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [adding, setAdding] = useState(false);
-	const [newRow, setNewRow] = useState({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', totalTrainings: '', trainingsDone: '' });
+	const [editingRow, setEditingRow] = useState(null);
+	const [newRow, setNewRow] = useState({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', trainingsDone: '' });
 	useEffect(() => { rememberedMonth = selectedMonth; }, [selectedMonth]);
 	useEffect(() => { rememberedYear = selectedYear; }, [selectedYear]);
 	useEffect(() => { rememberedSheet = selectedSheet; }, [selectedSheet]);
 	const mainTableData = useMemo(() => {
-		const rows = sheetData.map((row) => row.slice(0, 13));
+		const rows = sheetData.map((row) => row.slice(0, 14));
 		const lastContentRow = rows.findLastIndex((row) => row.some((value) => value != null && value !== ''));
 		return rows.slice(0, lastContentRow + 1);
 	}, [sheetData]);
 	const summaryTableData = useMemo(() => {
 		const summaryRows = sheetData.slice(1).map((row) => {
-			const summaryRow = row.slice(14, 17);
+			const summaryRow = row.slice(15, 18);
 			const combinedValue = summaryRow[2] != null
 				? `${summaryRow[1] ?? ''} (${formatSummaryAmount(summaryRow[2])})`
 				: summaryRow[1];
@@ -142,7 +143,7 @@ const PTs = () => {
 	};
 
 	const saveCell = async (value, row, column) => {
-		if (!selectedFile || column !== 8) return;
+		if (!selectedFile || column !== 9) return;
 		setSaving(true);
 		setError('');
 		try {
@@ -183,10 +184,51 @@ const PTs = () => {
 			const refreshedWorkbook = await refreshedResponse.json();
 			setWorkbook(refreshedWorkbook);
 			setSheetData(refreshedWorkbook[selectedSheet] || []);
-			setNewRow({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', totalTrainings: '', trainingsDone: '' });
+			setNewRow({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', trainingsDone: '' });
 			setAdding(false);
 		} catch (addError) {
 			setError(addError.message);
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const startEditingRow = (rowIndex, row) => {
+		setNewRow({
+			memberNumber: String(row[0] ?? ''),
+			clientName: String(row[1] ?? ''),
+			contract: String(row[2] ?? ''),
+			hours: String(row[3] ?? ''),
+			amount: String(row[5] ?? ''),
+			percentage: String(typeof row[6] === 'number' ? row[6] * 100 : row[6] ?? ''),
+			trainingsDone: String(row[9] ?? ''),
+		});
+		setAdding(false);
+		setEditingRow(rowIndex);
+	};
+
+	const updateRow = async (event) => {
+		event.preventDefault();
+		if (!selectedFile || editingRow == null) return;
+		setSaving(true);
+		setError('');
+		try {
+			const response = await fetch(`${API_URL}/api/pt-files/${encodeURIComponent(selectedFile.filename)}/rows/${editingRow}?sheet=${encodeURIComponent(selectedSheet)}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(newRow),
+			});
+			const result = await readJson(response);
+			if (!response.ok) throw new Error(result.error || 'Não foi possível atualizar a linha.');
+			const refreshedResponse = await fetch(`${API_URL}/api/pt-files/${encodeURIComponent(selectedFile.filename)}`);
+			if (!refreshedResponse.ok) throw new Error('Não foi possível atualizar o mapa PT.');
+			const refreshedWorkbook = await refreshedResponse.json();
+			setWorkbook(refreshedWorkbook);
+			setSheetData(refreshedWorkbook[selectedSheet] || []);
+			setEditingRow(null);
+			setNewRow({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', trainingsDone: '' });
+		} catch (updateError) {
+			setError(updateError.message);
 		} finally {
 			setSaving(false);
 		}
@@ -213,21 +255,32 @@ const PTs = () => {
 	};
 
 	const addedRows = useMemo(() => new Set(
-		sheetData.map((row, rowIndex) => row[13] === 'added' ? rowIndex : null).filter((rowIndex) => rowIndex != null),
+		sheetData.map((row, rowIndex) => row[14] === 'added' ? rowIndex : null).filter((rowIndex) => rowIndex != null),
 	), [sheetData]);
+	const renderRowForm = (onSubmit, submitLabel) => (
+		<form className="pt-add-row" onSubmit={onSubmit}>
+			{[
+				['memberNumber', 'Nº Sócio', 'text'], ['clientName', 'Nome do Cliente', 'text'], ['contract', 'Contrato', 'text'],
+				['hours', 'Horas', 'number'], ['amount', 'Valor c/iva', 'number'], ['percentage', '%', 'number'], ['trainingsDone', 'Treinos Dados', 'number'],
+			].map(([field, label, type]) => (
+				<label key={field}>{label}<input required type={type} min="0" max={field === 'percentage' ? 100 : undefined} step={type === 'number' ? 'any' : undefined} value={newRow[field]} onChange={(event) => setNewRow((current) => ({ ...current, [field]: event.target.value }))} /></label>
+			))}
+			<div className="pt-add-row-actions"><button type="submit" disabled={saving}>{submitLabel}</button><button type="button" onClick={() => { setAdding(false); setEditingRow(null); }} disabled={saving}>Cancelar</button></div>
+		</form>
+	);
 
 	return (
 		<main className="pts-page">
 			<section className="pts-toolbar" aria-label="Filtros do mapa">
 				<label>
 					Mês
-					<select value={selectedMonth} onChange={(event) => setSelectedMonth(Number(event.target.value))} disabled={saving}>
+					<select value={selectedMonth} onChange={(event) => setSelectedMonth(Number(event.target.value))} disabled={saving || editingRow != null}>
 						{MONTHS.map((month, index) => <option value={index} key={month}>{month}</option>)}
 					</select>
 				</label>
 				<label>
 					Ano
-					<select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))} disabled={saving}>
+					<select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))} disabled={saving || editingRow != null}>
 						{years.map((year) => <option value={year} key={year}>{year}</option>)}
 					</select>
 				</label>
@@ -267,7 +320,7 @@ const PTs = () => {
 									<button className={sheet === selectedSheet ? 'active' : ''} type="button" key={sheet} onClick={() => {
 								setSelectedSheet(sheet);
 								setSheetData(workbook[sheet] || []);
-									}} disabled={saving}>
+											}} disabled={saving || editingRow != null}>
 								{sheet}
 							</button>
 						))}
@@ -276,26 +329,21 @@ const PTs = () => {
 					<div className="spreadsheet-wrap">
 						<StaticTable
 							rows={mainTableData}
-							numberFormats={{ 4: '0.00€', 5: '0%', 6: '0.00€', 9: '0.00€', 10: '0.00€', 12: '0.00€' }}
-							editableColumns={[8]}
+							numberFormats={{ 5: '0.00€', 6: '0%', 7: '0.00€', 10: '0.00€', 11: '0.00€', 13: '0.00€' }}
+							editableColumns={[9]}
 							onCellChange={saveCell}
 							disabled={saving}
 							label={`Folha ${selectedSheet}`}
+							rowActionColumnCount={2}
 							rowActions={(row, rowIndex) => addedRows.has(rowIndex) ? (
-								<td key="actions"><button className="remove-row-button" type="button" onClick={() => deleteRow(rowIndex)} disabled={saving}>Remover</button></td>
+								<>
+									<td className="static-table-action-cell"><button className="edit-row-button" type="button" onClick={() => startEditingRow(rowIndex, row)} disabled={saving || editingRow != null}>Editar</button></td>
+									<td className="static-table-action-cell"><button className="remove-row-button" type="button" onClick={() => deleteRow(rowIndex)} disabled={saving || editingRow != null}>Remover</button></td>
+								</>
 							) : null}
+							rowDetails={(_, rowIndex) => editingRow === rowIndex ? renderRowForm(updateRow, 'Guardar') : null}
 						/>
-						{adding ? (
-							<form className="pt-add-row" onSubmit={addRow}>
-								{[
-									['memberNumber', 'Nº Sócio', 'text'], ['clientName', 'Nome do Cliente', 'text'], ['contract', 'Contrato', 'text'],
-									['hours', 'Horas', 'number'], ['amount', 'Valor c/iva', 'number'], ['totalTrainings', 'Total Treinos', 'number'], ['trainingsDone', 'Treinos Dados', 'number'],
-								].map(([field, label, type]) => (
-									<label key={field}>{label}<input required type={type} min="0" step={type === 'number' ? 'any' : undefined} value={newRow[field]} onChange={(event) => setNewRow((current) => ({ ...current, [field]: event.target.value }))} /></label>
-								))}
-								<div className="pt-add-row-actions"><button type="submit" disabled={saving}>Adicionar</button><button type="button" onClick={() => setAdding(false)} disabled={saving}>Cancelar</button></div>
-							</form>
-						) : <button className="add-row-button" type="button" onClick={() => setAdding(true)} disabled={saving}>Adicionar cliente</button>}
+						{adding ? renderRowForm(addRow, 'Adicionar') : editingRow == null && <button className="add-row-button" type="button" onClick={() => { setNewRow({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', trainingsDone: '' }); setAdding(true); }} disabled={saving}>Adicionar cliente</button>}
 						<section className="pts-summary" aria-label="Resumo da folha">
 							<h2>Resumo</h2>
 							<StaticTable

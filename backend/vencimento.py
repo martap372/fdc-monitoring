@@ -16,6 +16,29 @@ MONTHS = [
 	"Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
 ]
 OUTPUT_PREFIX = "Vencimento_"
+AF_CLOSURES_PATH = os.path.join(BACKEND_DIR, "af_closures.json")
+
+
+def get_af_closure_override(year, month, person):
+	try:
+		with open(AF_CLOSURES_PATH, encoding="utf-8") as overrides_file:
+			overrides = json.load(overrides_file)
+	except (FileNotFoundError, json.JSONDecodeError):
+		return None
+	return overrides.get(str(year), {}).get(person, {}).get(str(month))
+
+
+def set_af_closure_override(year, month, person, value):
+	try:
+		with open(AF_CLOSURES_PATH, encoding="utf-8") as overrides_file:
+			overrides = json.load(overrides_file)
+	except (FileNotFoundError, json.JSONDecodeError):
+		overrides = {}
+	overrides.setdefault(str(year), {}).setdefault(person, {})[str(month)] = value
+	temporary_path = f"{AF_CLOSURES_PATH}.tmp"
+	with open(temporary_path, "w", encoding="utf-8") as overrides_file:
+		json.dump(overrides, overrides_file, ensure_ascii=False, indent=2)
+	os.replace(temporary_path, AF_CLOSURES_PATH)
 
 
 def _pt_files():
@@ -43,7 +66,7 @@ def _af_file_by_month(year):
 	return files
 
 
-def _af_status_totals(af_files):
+def _af_status_totals(af_files, year):
 	"""Count paid AF evaluations and closes by AF workbook month and PT."""
 	import app
 
@@ -73,7 +96,9 @@ def _af_status_totals(af_files):
 					)
 					fecho_count += row[fecho_column] == "Sim"
 			total_af[(person, month)] = paid_count
-			fechos_af[(person, month)] = fecho_count
+			fechos_af[(person, month)] = get_af_closure_override(year, month, person)
+			if fechos_af[(person, month)] is None:
+				fechos_af[(person, month)] = fecho_count
 		workbook.close()
 	return total_af, fechos_af
 
@@ -263,7 +288,7 @@ def _write_sheet(
 		)
 		weekday_saturday_hours = round(weekday_saturday_hours, 2)
 		sunday_hours = round(sunday_hours, 2)
-		sala_commission = round(weekday_saturday_hours * 7 + sunday_hours * 7.5, 2)
+		sala_commission = round(weekday_saturday_hours * 7 + sunday_hours * 8.5, 2)
 		run_club_commission = round(run_club_classes * 15, 2)
 		percent_fecho = round(fechos_af / total_af, 4) if total_af else 0
 		if percent_fecho < 0.1:
@@ -277,7 +302,13 @@ def _write_sheet(
 			pt_commission + af_commission + sala_commission + run_club_commission + external_value,
 			2,
 		)
-		simao_commission = round(pt_value_without_vat * 0.05 + af_commission, 2) if total_vencimento >= 1500 else 0
+		simao_base_commission = round(pt_value_without_vat * 0.05 + af_commission, 2)
+		simao_sunday_commission = round(sunday_hours * 8.5, 2)
+		simao_commission = (
+			round(simao_base_commission + simao_sunday_commission, 2)
+			if total_vencimento >= 1500
+			else simao_sunday_commission
+		)
 		row_values.append([
 			pt_hours, pt_value_with_vat, pt_value_without_vat, pt_commission,
 			total_af, fechos_af, percent_fecho, af_commission, weekday_saturday_hours, sunday_hours,
@@ -303,7 +334,7 @@ def _write_sheet(
 		worksheet.write_number(row_index, 10, sunday_hours, formats["number"])
 		worksheet.write_formula(
 			row_index, 11,
-			f"=ROUND(J{excel_row}*7+K{excel_row}*7.5,2)",
+			f"=ROUND(J{excel_row}*7+K{excel_row}*8.5,2)",
 			formats["euro"], sala_commission,
 		)
 		if has_run_club:
@@ -326,14 +357,11 @@ def _write_sheet(
 				formats["euro"], total_vencimento,
 			)
 			if has_simao_commission:
-				if simao_commission:
-					worksheet.write_formula(
-						row_index, 13,
-						f"=IF(M{excel_row}>=1500,ROUND(C{excel_row}*5%+H{excel_row},2),\"\")",
-						formats["euro"], simao_commission,
-					)
-				else:
-					worksheet.write_blank(row_index, 13, None, formats["euro"])
+				worksheet.write_formula(
+					row_index, 13,
+					f"=IF(M{excel_row}>=1500,ROUND(C{excel_row}*5%+H{excel_row},2),0)+ROUND(K{excel_row}*8.5,2)",
+					formats["euro"], simao_commission,
+				)
 				worksheet.write_number(row_index, 14, external_value, formats["euro"])
 			else:
 				worksheet.write_number(row_index, 13, external_value, formats["euro"])
@@ -407,7 +435,7 @@ def generate_vencimento(year=None, events=None):
 			with pd.ExcelWriter(temporary_filename, engine="xlsxwriter") as writer:
 				pt_files = _pt_file_by_month(year)
 				af_files = _af_file_by_month(year)
-				af_totals, af_closures = _af_status_totals(af_files)
+				af_totals, af_closures = _af_status_totals(af_files, year)
 				existing_external_values = _existing_external_values(year)
 				existing_run_club_values = _existing_run_club_values(year)
 				for person in app.PEOPLE:

@@ -3,6 +3,7 @@ import ipaddress
 import os
 import re
 import subprocess
+from copy import copy
 from urllib.parse import urlparse
 
 from flask import Flask, jsonify, request, send_file
@@ -26,11 +27,15 @@ from mapa_sala import (
     vencimento_update_status,
     write_events,
 )
-from pt import BACKEND_DIR, WORKBOOK_LOCK, import_, pt_files, workbook_data
-from af import af_files, af_workbook_data, import_ as import_af
+from pt import BACKEND_DIR, WORKBOOK_LOCK, import_, pt_client_status, pt_files, workbook_data
+from af import MONTHS as AF_MONTHS, af_files, af_workbook_data, import_ as import_af
 from planos import planos_files, planos_workbook_data, import_ as import_planos
 from convert import convert_xls
-from vencimento import generate_vencimento
+from vencimento import (
+    generate_vencimento,
+    get_af_closure_override,
+    set_af_closure_override,
+)
 from openpyxl import load_workbook
 from uuid import uuid4
 
@@ -115,6 +120,38 @@ def download_af_workbook(filename):
     if filename not in af_files():
         return jsonify({'error': 'Ficheiro AF não encontrado'}), 404
     return send_file(os.path.join(BACKEND_DIR, filename), as_attachment=True, download_name=filename)
+
+
+@app.route('/api/af-files/<filename>/fechos', methods=['GET', 'PUT'])
+def update_af_fechos(filename):
+    if filename not in af_files():
+        return jsonify({'error': 'Ficheiro AF não encontrado'}), 404
+    match = re.fullmatch(r'AF_(.+)(\d{4})\.xlsx', filename)
+    if not match or match.group(1) not in AF_MONTHS:
+        return jsonify({'error': 'Ficheiro AF inválido'}), 400
+
+    changes = request.get_json(silent=True) or {} if request.method == 'PUT' else {}
+    sheet_name = changes.get('sheet') if request.method == 'PUT' else request.args.get('sheet')
+    if sheet_name not in PEOPLE:
+        return jsonify({'error': 'Folha AF inválida'}), 400
+    year = int(match.group(2))
+    month = AF_MONTHS.index(match.group(1)) + 1
+    if request.method == 'GET':
+        return jsonify({'value': get_af_closure_override(year, month, sheet_name)})
+
+    value = changes.get('value')
+    try:
+        numeric_value = float(value)
+        if not numeric_value.is_integer() or numeric_value < 0:
+            raise ValueError
+        numeric_value = int(numeric_value)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'Fechos deve ser um número inteiro não negativo'}), 400
+
+    with WORKBOOK_LOCK:
+        set_af_closure_override(year, month, sheet_name, numeric_value)
+    schedule_vencimento_update(year=year)
+    return jsonify({'value': numeric_value})
 
 
 @app.get('/api/planos-files')
@@ -345,7 +382,7 @@ def update_pt_cell(filename):
         return jsonify({'error': 'Dados da célula inválidos'}), 400
     if row < 0 or column < 0:
         return jsonify({'error': 'Coordenadas da célula inválidas'}), 400
-    if column != 8:
+    if column != 9:
         return jsonify({'error': 'Apenas a coluna Treinos Dados pode ser editada'}), 400
 
     value = changes.get('value')
@@ -367,7 +404,10 @@ def update_pt_cell(filename):
             return jsonify({'error': 'Folha não encontrada'}), 404
 
         worksheet = workbook[sheet_name]
-        legacy_payment_column = worksheet.cell(row=1, column=5).value == 'Meio Pagamento'
+        legacy_payment_column = 'Meio Pagamento' in [
+            worksheet.cell(row=1, column=column).value
+            for column in range(1, worksheet.max_column + 1)
+        ]
         storage_column = column + 1 if not legacy_payment_column else column + 2
         cell = worksheet.cell(row=row + 1, column=storage_column)
         cell.value = None if value in (None, '') else value
@@ -407,7 +447,9 @@ def add_pt_row(filename):
     try:
         hours = positive_number('hours', 'Horas')
         amount = positive_number('amount', 'Valor c/iva')
-        total_trainings = positive_number('totalTrainings', 'Total Treinos', integer=True)
+        percentage = positive_number('percentage', '%')
+        if percentage > 100:
+            raise ValueError('% deve ser um valor entre 0 e 100')
         trainings_done = positive_number('trainingsDone', 'Treinos Dados', integer=True)
     except ValueError as validation_error:
         return jsonify({'error': str(validation_error)}), 400
@@ -422,11 +464,11 @@ def add_pt_row(filename):
         worksheet = workbook[sheet_name]
         data_rows = [
             row_index for row_index in range(2, worksheet.max_row + 1)
-            if any(worksheet.cell(row=row_index, column=column).value not in (None, '') for column in range(1, 14))
+            if any(worksheet.cell(row=row_index, column=column).value not in (None, '') for column in range(1, 15))
         ]
         data_end = max(data_rows, default=1)
         new_row = data_end + 1
-        for column in range(1, 14):
+        for column in range(1, 15):
             source = worksheet.cell(row=data_end, column=column)
             target = worksheet.cell(row=new_row, column=column)
             if source.has_style:
@@ -439,40 +481,41 @@ def add_pt_row(filename):
         worksheet.cell(new_row, 2).value = changes['clientName'].strip()
         worksheet.cell(new_row, 3).value = changes['contract'].strip()
         worksheet.cell(new_row, 4).value = hours
-        worksheet.cell(new_row, 5).value = amount
-        worksheet.cell(new_row, 6).value = worksheet.cell(row=2, column=6).value or 0
-        worksheet.cell(new_row, 7).value = f'=ROUND(E{new_row}*F{new_row}/1.23,2)'
-        worksheet.cell(new_row, 8).value = total_trainings
-        worksheet.cell(new_row, 9).value = trainings_done
-        worksheet.cell(new_row, 10).value = f'=ROUND(G{new_row}/H{new_row},2)'
-        worksheet.cell(new_row, 11).value = f'=I{new_row}*J{new_row}'
-        worksheet.cell(new_row, 12).value = f'=H{new_row}-I{new_row}'
-        worksheet.cell(new_row, 13).value = f'=J{new_row}*L{new_row}'
-        worksheet.cell(new_row, 14).value = 'added'
-        worksheet.column_dimensions['N'].hidden = True
+        worksheet.cell(new_row, 5).value = pt_client_status(member_number, filename)
+        worksheet.cell(new_row, 6).value = amount
+        worksheet.cell(new_row, 7).value = percentage / 100
+        worksheet.cell(new_row, 8).value = f'=ROUND(F{new_row}*G{new_row}/1.23,2)'
+        worksheet.cell(new_row, 9).value = hours
+        worksheet.cell(new_row, 10).value = trainings_done
+        worksheet.cell(new_row, 11).value = f'=ROUND(H{new_row}/I{new_row},2)'
+        worksheet.cell(new_row, 12).value = f'=J{new_row}*K{new_row}'
+        worksheet.cell(new_row, 13).value = f'=I{new_row}-J{new_row}'
+        worksheet.cell(new_row, 14).value = f'=K{new_row}*M{new_row}'
+        worksheet.cell(new_row, 15).value = 'added'
+        worksheet.column_dimensions['O'].hidden = True
 
         data_end = new_row
         for row_index in range(1, worksheet.max_row + 1):
-            label = worksheet.cell(row=row_index, column=15).value
+            label = worksheet.cell(row=row_index, column=16).value
             if label == 'Total Clientes':
-                worksheet.cell(row_index, column=16).value = f'=COUNT(A2:A{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=COUNT(A2:A{data_end})'
             elif label == 'Total Horas':
-                worksheet.cell(row_index, column=16).value = f'=SUM(D2:D{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUM(D2:D{data_end})'
             elif label == 'Total Faturação':
-                worksheet.cell(row_index, column=16).value = f'=SUM(E2:E{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUM(F2:F{data_end})'
             elif label == 'Total Treinos Pagos':
-                worksheet.cell(row_index, column=16).value = f'=SUM(H2:H{data_end})'
-                worksheet.cell(row_index, column=17).value = f'=SUM(G2:G{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUM(I2:I{data_end})'
+                worksheet.cell(row_index, column=18).value = f'=SUM(H2:H{data_end})'
             elif label == 'Total Treinos Dados':
-                worksheet.cell(row_index, column=16).value = f'=SUM(I2:I{data_end})'
-                worksheet.cell(row_index, column=17).value = f'=SUM(K2:K{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUM(J2:J{data_end})'
+                worksheet.cell(row_index, column=18).value = f'=SUM(L2:L{data_end})'
             elif label == 'Total Treinos em Falta':
-                worksheet.cell(row_index, column=16).value = f'=SUM(L2:L{data_end})'
                 worksheet.cell(row_index, column=17).value = f'=SUM(M2:M{data_end})'
+                worksheet.cell(row_index, column=18).value = f'=SUM(N2:N{data_end})'
             elif label == 'Total Treinos Recuperados':
-                worksheet.cell(row_index, column=16).value = f'=SUMIF(N2:N{data_end},"added",I2:I{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUMIF(O2:O{data_end},"added",J2:J{data_end})'
             elif label == 'A receber':
-                worksheet.cell(row_index, column=16).value = f'=SUM(K2:K{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUM(L2:L{data_end})'
 
         temporary_path = f'{workbook_path}.tmp'
         workbook.save(temporary_path)
@@ -481,6 +524,79 @@ def add_pt_row(filename):
 
     schedule_vencimento_update(year=int(filename[-9:-5]))
     return jsonify({'sheet': sheet_name, 'row': new_row - 1}), 201
+
+
+@app.put('/api/pt-files/<filename>/rows/<int:row>')
+def update_pt_row(filename, row):
+    if filename not in pt_files():
+        return jsonify({'error': 'Ficheiro PT não encontrado'}), 404
+    if row < 1:
+        return jsonify({'error': 'Coordenadas da linha inválidas'}), 400
+
+    changes = request.get_json(silent=True) or {}
+    sheet_name = request.args.get('sheet')
+    if not isinstance(sheet_name, str):
+        return jsonify({'error': 'Folha inválida'}), 400
+
+    text_fields = ('memberNumber', 'clientName', 'contract')
+    if any(not isinstance(changes.get(field), str) or not changes[field].strip() for field in text_fields):
+        return jsonify({'error': 'Preencha Nº Sócio, Nome do Cliente e Contrato'}), 400
+
+    def positive_number(field, label, integer=False):
+        try:
+            value = float(changes[field])
+            if value < 0 or (integer and not value.is_integer()):
+                raise ValueError
+            return int(value) if integer else value
+        except (KeyError, TypeError, ValueError):
+            raise ValueError(f'{label} deve ser um número não negativo' + (' inteiro' if integer else ''))
+
+    try:
+        hours = positive_number('hours', 'Horas')
+        amount = positive_number('amount', 'Valor c/iva')
+        percentage = positive_number('percentage', '%')
+        if percentage > 100:
+            raise ValueError('% deve ser um valor entre 0 e 100')
+        trainings_done = positive_number('trainingsDone', 'Treinos Dados', integer=True)
+    except ValueError as validation_error:
+        return jsonify({'error': str(validation_error)}), 400
+
+    workbook_path = os.path.join(BACKEND_DIR, filename)
+    with WORKBOOK_LOCK:
+        workbook = load_workbook(workbook_path, data_only=False)
+        if sheet_name not in workbook.sheetnames:
+            workbook.close()
+            return jsonify({'error': 'Folha não encontrada'}), 404
+
+        worksheet = workbook[sheet_name]
+        excel_row = row + 1
+        if worksheet.cell(row=excel_row, column=15).value != 'added':
+            workbook.close()
+            return jsonify({'error': 'Apenas linhas adicionadas podem ser editadas'}), 400
+
+        member_number = changes['memberNumber'].strip()
+        worksheet.cell(excel_row, 1).value = int(member_number) if member_number.isdigit() else member_number
+        worksheet.cell(excel_row, 2).value = changes['clientName'].strip()
+        worksheet.cell(excel_row, 3).value = changes['contract'].strip()
+        worksheet.cell(excel_row, 4).value = hours
+        worksheet.cell(excel_row, 5).value = pt_client_status(member_number, filename)
+        worksheet.cell(excel_row, 6).value = amount
+        worksheet.cell(excel_row, 7).value = percentage / 100
+        worksheet.cell(excel_row, 8).value = f'=ROUND(F{excel_row}*G{excel_row}/1.23,2)'
+        worksheet.cell(excel_row, 9).value = hours
+        worksheet.cell(excel_row, 10).value = trainings_done
+        worksheet.cell(excel_row, 11).value = f'=ROUND(H{excel_row}/I{excel_row},2)'
+        worksheet.cell(excel_row, 12).value = f'=J{excel_row}*K{excel_row}'
+        worksheet.cell(excel_row, 13).value = f'=I{excel_row}-J{excel_row}'
+        worksheet.cell(excel_row, 14).value = f'=K{excel_row}*M{excel_row}'
+
+        temporary_path = f'{workbook_path}.tmp'
+        workbook.save(temporary_path)
+        os.replace(temporary_path, workbook_path)
+        workbook.close()
+
+    schedule_vencimento_update(year=int(filename[-9:-5]))
+    return jsonify({'sheet': sheet_name, 'row': row}), 200
 
 
 @app.delete('/api/pt-files/<filename>/rows/<int:row>')
@@ -501,39 +617,58 @@ def delete_pt_row(filename, row):
 
         worksheet = workbook[sheet_name]
         excel_row = row + 1
-        if worksheet.cell(row=excel_row, column=14).value != 'added':
+        if worksheet.cell(row=excel_row, column=15).value != 'added':
             workbook.close()
             return jsonify({'error': 'Apenas linhas adicionadas podem ser removidas'}), 400
 
-        for column in range(1, 15):
-            worksheet.cell(row=excel_row, column=column).value = None
+        data_rows = [
+            row_index for row_index in range(2, worksheet.max_row + 1)
+            if any(worksheet.cell(row=row_index, column=column).value not in (None, '') for column in range(1, 15))
+        ]
+        data_end = max(data_rows, default=1)
+        for target_row in range(excel_row, data_end):
+            for column in range(1, 16):
+                source = worksheet.cell(row=target_row + 1, column=column)
+                target = worksheet.cell(row=target_row, column=column)
+                target.value = source.value
+                target._style = copy(source._style)
+
+        for column in range(1, 16):
+            worksheet.cell(row=data_end, column=column).value = None
+
+        for row_index in range(excel_row, data_end):
+            worksheet.cell(row=row_index, column=8).value = f'=ROUND(F{row_index}*G{row_index}/1.23,2)'
+            worksheet.cell(row=row_index, column=11).value = f'=ROUND(H{row_index}/I{row_index},2)'
+            worksheet.cell(row=row_index, column=12).value = f'=J{row_index}*K{row_index}'
+            worksheet.cell(row=row_index, column=13).value = f'=I{row_index}-J{row_index}'
+            worksheet.cell(row=row_index, column=14).value = f'=K{row_index}*M{row_index}'
 
         data_rows = [
             row_index for row_index in range(2, worksheet.max_row + 1)
-            if any(worksheet.cell(row=row_index, column=column).value not in (None, '') for column in range(1, 14))
+            if any(worksheet.cell(row=row_index, column=column).value not in (None, '') for column in range(1, 15))
         ]
         data_end = max(data_rows, default=1)
         for row_index in range(1, worksheet.max_row + 1):
-            label = worksheet.cell(row=row_index, column=15).value
+            label = worksheet.cell(row=row_index, column=16).value
             if label == 'Total Clientes':
-                worksheet.cell(row_index, column=16).value = f'=COUNT(A2:A{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=COUNT(A2:A{data_end})'
             elif label == 'Total Horas':
-                worksheet.cell(row_index, column=16).value = f'=SUM(D2:D{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUM(D2:D{data_end})'
             elif label == 'Total Faturação':
-                worksheet.cell(row_index, column=16).value = f'=SUM(E2:E{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUM(F2:F{data_end})'
             elif label == 'Total Treinos Pagos':
-                worksheet.cell(row_index, column=16).value = f'=SUM(H2:H{data_end})'
-                worksheet.cell(row_index, column=17).value = f'=SUM(G2:G{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUM(I2:I{data_end})'
+                worksheet.cell(row_index, column=18).value = f'=SUM(H2:H{data_end})'
             elif label == 'Total Treinos Dados':
-                worksheet.cell(row_index, column=16).value = f'=SUM(I2:I{data_end})'
-                worksheet.cell(row_index, column=17).value = f'=SUM(K2:K{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUM(J2:J{data_end})'
+                worksheet.cell(row_index, column=18).value = f'=SUM(L2:L{data_end})'
             elif label == 'Total Treinos em Falta':
-                worksheet.cell(row_index, column=16).value = f'=SUM(L2:L{data_end})'
                 worksheet.cell(row_index, column=17).value = f'=SUM(M2:M{data_end})'
+                worksheet.cell(row_index, column=18).value = f'=SUM(N2:N{data_end})'
             elif label == 'Total Treinos Recuperados':
-                worksheet.cell(row_index, column=16).value = f'=SUMIF(N2:N{data_end},"added",I2:I{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUMIF(O2:O{data_end},"added",J2:J{data_end})'
             elif label == 'A receber':
-                worksheet.cell(row_index, column=16).value = f'=SUM(K2:K{data_end})'
+                worksheet.cell(row_index, column=17).value = f'=SUM(L2:L{data_end})'
 
         temporary_path = f'{workbook_path}.tmp'
         workbook.save(temporary_path)

@@ -197,6 +197,13 @@ def build_weekly_hours(events):
 			cursor = segment_end
 
 	for week in weekly_hours.values():
+		simao = 'Simão Sá'
+		if any(
+			week[category][simao] > 0
+			for category in ('weekday_hours', 'saturday_hours', 'sunday_hours')
+		):
+			week['weekday_hours'][simao] += 3
+
 		for category in ('weekday_hours', 'saturday_hours', 'sunday_hours'):
 			for person, hours in week[category].items():
 				week[category][person] = round(hours, 2)
@@ -219,6 +226,7 @@ def build_monthly_hours(events, year, month):
 		}
 		for person in app.PEOPLE
 	}
+	simao_weeks = set()
 
 	for event in events:
 		start = parse_event_date(event.get('start'))
@@ -237,9 +245,13 @@ def build_monthly_hours(events, year, month):
 				hours = (segment_end - cursor).total_seconds() / 3600
 				category = hours_category_for_date(cursor.date())
 				monthly_hours[person][category] += hours
+				if person == 'Simão Sá':
+					simao_weeks.add(week_number_in_month(cursor))
 			cursor = segment_end
 
 	for totals in monthly_hours.values():
+		if totals['person'] == 'Simão Sá' and simao_weeks:
+			totals['weekday_hours'] += 3 * len(simao_weeks)
 		totals['weekday_hours'] = round(totals['weekday_hours'], 2)
 		totals['saturday_hours'] = round(totals['saturday_hours'], 2)
 		totals['sunday_hours'] = round(totals['sunday_hours'], 2)

@@ -13,12 +13,12 @@ WORKBOOK_LOCK = threading.Lock()
 
 meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
 
-data = {"André Mota": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
-    "Simão Sá": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
-    "Pedro Freitas": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
-    "Emanuel Ferreira": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
-    "Rúben Ramos": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
-    "Daniel Araújo": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""}}
+data = {"André Mota": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
+    "Simão Sá": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
+    "Pedro Freitas": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
+    "Emanuel Ferreira": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
+    "Rúben Ramos": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
+    "Daniel Araújo": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""}}
 
 resumo = {"André Mota": {"Total Clientes": [], "Total Horas": [], "Total Faturação": [], "Total Treinos Pagos": [], "Total Treinos Dados": [], "Total Treinos em Falta": [], "Total Treinos Recuperados": [], "A receber": []},
         "Simão Sá": {"Total Clientes": [], "Total Horas": [], "Total Faturação": [], "Total Treinos Pagos": [], "Total Treinos Dados": [], "Total Treinos em Falta": [], "Total Treinos Recuperados": [], "A receber": []},
@@ -110,44 +110,55 @@ def _save_client_since(client_since):
     os.replace(temporary_path, CLIENT_SINCE_PATH)
 
 
+def pt_client_status(member_number, filename):
+    match = re.fullmatch(r'PT_(.+)(\d{4})\.xlsx', os.path.basename(filename))
+    if not match or match.group(1) not in meses:
+        return 'Contínuo'
+    with open(CLIENT_SINCE_PATH, encoding='utf-8') as registry_file:
+        client_since = json.load(registry_file)
+    starting_month = client_since.get(_member_key(member_number))
+    month_year = f'{meses.index(match.group(1)) + 1:02d}-{match.group(2)}'
+    return 'Fecho' if starting_month == month_year else 'Contínuo'
+
+
 def _round_to_nearest_005(value):
     return round(value * 20) / 20
 
 
 def _pt_calculated_values(row):
     calculated = list(row)
-    calculated[6] = round(_number(row, 4) * _number(row, 5) / 1.23, 2)
-    calculated[9] = round(calculated[6] / _number(row, 7), 2) if _number(row, 7) else 0
-    calculated[10] = _number(row, 8) * calculated[9]
-    calculated[11] = _number(row, 7) - _number(row, 8)
-    calculated[12] = calculated[9] * calculated[11]
+    calculated[7] = round(_number(row, 5) * _number(row, 6) / 1.23, 2)
+    calculated[10] = round(calculated[7] / _number(row, 8), 2) if _number(row, 8) else 0
+    calculated[11] = _number(row, 9) * calculated[10]
+    calculated[12] = _number(row, 8) - _number(row, 9)
+    calculated[13] = calculated[10] * calculated[12]
     return calculated
 
 
 def _pt_summary_values(rows):
     data_rows = rows[1:]
     for row in rows:
-        if len(row) > 15 and isinstance(row[14], str) and row[14]:
-            row[15] = {
+        if len(row) > 16 and isinstance(row[15], str) and row[15]:
+            row[16] = {
                 'Total Clientes': sum(1 for data_row in data_rows if data_row[0]),
                 'Total Horas': sum(_number(data_row, 3) for data_row in data_rows),
-                'Total Faturação': sum(_number(data_row, 4) for data_row in data_rows),
-                'Total Treinos Pagos': sum(_number(data_row, 7) for data_row in data_rows),
-                'Total Treinos Dados': sum(_number(data_row, 8) for data_row in data_rows),
-                'Total Treinos em Falta': sum(_number(data_row, 11) for data_row in data_rows),
+                'Total Faturação': sum(_number(data_row, 5) for data_row in data_rows),
+                'Total Treinos Pagos': sum(_number(data_row, 8) for data_row in data_rows),
+                'Total Treinos Dados': sum(_number(data_row, 9) for data_row in data_rows),
+                'Total Treinos em Falta': sum(_number(data_row, 12) for data_row in data_rows),
                 'Total Treinos Recuperados': sum(
-                    _number(data_row, 8)
+                    _number(data_row, 9)
                     for data_row in data_rows
-                    if len(data_row) > 13 and data_row[13] == 'added'
+                    if len(data_row) > 14 and data_row[14] == 'added'
                 ),
-                'A receber': sum(_number(data_row, 10) for data_row in data_rows),
-            }.get(row[14])
-            if len(row) > 16 and row[14] == 'Total Treinos Pagos':
-                row[16] = sum(_number(data_row, 6) for data_row in data_rows)
-            if len(row) > 16 and row[14] == 'Total Treinos Dados':
-                row[16] = sum(_number(data_row, 10) for data_row in data_rows)
-            if len(row) > 16 and row[14] == 'Total Treinos em Falta':
-                row[16] = sum(_number(data_row, 12) for data_row in data_rows)
+                'A receber': sum(_number(data_row, 11) for data_row in data_rows),
+            }.get(row[15])
+            if len(row) > 17 and row[15] == 'Total Treinos Pagos':
+                row[17] = sum(_number(data_row, 7) for data_row in data_rows)
+            if len(row) > 17 and row[15] == 'Total Treinos Dados':
+                row[17] = sum(_number(data_row, 11) for data_row in data_rows)
+            if len(row) > 17 and row[15] == 'Total Treinos em Falta':
+                row[17] = sum(_number(data_row, 13) for data_row in data_rows)
 
 
 def workbook_data(filename, include_styles=False, data_only=False):
@@ -200,10 +211,11 @@ def workbook_data(filename, include_styles=False, data_only=False):
             values.append(value_row)
             styles.append(style_row)
         if values and 'Meio Pagamento' in values[0]:
+            payment_column = values[0].index('Meio Pagamento')
             for row in values:
-                row.pop(4)
+                row.pop(payment_column)
             for row in styles:
-                row.pop(4)
+                row.pop(payment_column)
         if not include_styles:
             data_rows = [row for row in values[1:] if row and row[0] not in (None, '')]
             total_faturacao = sum(_number(row, 4) for row in data_rows)
@@ -343,6 +355,12 @@ def import_(filename):
             )
             for member_number in data[pt]["Nº Sócio"]
         ]
+        data[pt]["Fecho/Contínuo"] = [
+            "Fecho"
+            if client_since.get(_member_key(member_number)) == f'{mes + 1:02d}-{ano}'
+            else "Contínuo"
+            for member_number in data[pt]["Nº Sócio"]
+        ]
 
     output_filename = os.path.join(
         BACKEND_DIR, f'PT_{meses[mes]}{ano}.xlsx'
@@ -367,49 +385,48 @@ def import_(filename):
         writer.sheets[sheet] = worksheet
 
         df1.to_excel(writer,sheet_name=sheet, index=False, startrow=0 , startcol=0)
-        df2.T.to_excel(writer,sheet_name=sheet, index=True, startrow=0, startcol=14)
+        df2.T.to_excel(writer,sheet_name=sheet, index=True, startrow=0, startcol=15)
 
         for row in range(1, len(df1) + 1): 
             # Comissão PT
-            worksheet.write_formula(row, 6, f"=ROUND(E{row + 1}*F{row + 1}/1.23,2)")
+            worksheet.write_formula(row, 7, f"=ROUND(F{row + 1}*G{row + 1}/1.23,2)")
             # Valor/Treino
-            worksheet.write_formula(row, 9, f"=ROUND(G{row + 1}/H{row + 1},2)")
+            worksheet.write_formula(row, 10, f"=ROUND(H{row + 1}/I{row + 1},2)")
             # A receber
-            worksheet.write_formula(row, 10, f"=I{row + 1}*J{row + 1}")
+            worksheet.write_formula(row, 11, f"=J{row + 1}*K{row + 1}")
             # Treinos em Falta
-            worksheet.write_formula(row, 11, f"=H{row + 1}-I{row + 1}")
+            worksheet.write_formula(row, 12, f"=I{row + 1}-J{row + 1}")
             # Valor em Falta
-            worksheet.write_formula(row, 12, f"=J{row + 1}*L{row + 1}")
+            worksheet.write_formula(row, 13, f"=K{row + 1}*M{row + 1}")
 
         percent = workbook.add_format({"num_format": "0%"})
         euro = workbook.add_format({"num_format": "0.00€"})
         header = workbook.add_format({'bold': True, 'align': 'center'})
-        worksheet.set_column("E:E", None, euro)
-        worksheet.set_column("F:F", None, percent)
-        worksheet.set_column("G:G", None, euro)
-        worksheet.set_column("J:J", None, euro)
-        worksheet.set_column("K:K", None, euro)
-        worksheet.set_column("M:M", None, euro)
+        worksheet.set_column("F:F", None, euro)
+        worksheet.set_column("G:G", None, percent)
+        worksheet.set_column("H:H", None, euro)
+        worksheet.set_column("K:L", None, euro)
+        worksheet.set_column("N:N", None, euro)
         worksheet.set_row(0, None, header)
-        worksheet.set_column("O:O", None, header)
+        worksheet.set_column("P:P", None, header)
 
         # Total Clientes
-        worksheet.write_formula("P2", f"=COUNT(A2:A{length})")
+        worksheet.write_formula("Q2", f"=COUNT(A2:A{length})")
         # Total Horas
-        worksheet.write_formula("P3", f"=SUM(D2:D{length})")
+        worksheet.write_formula("Q3", f"=SUM(D2:D{length})")
         # Total Faturação
-        worksheet.write("P4", f"=SUM(E2:E{length})", euro)
+        worksheet.write("Q4", f"=SUM(F2:F{length})", euro)
         # Total Treinos Pagos
-        worksheet.write_formula("P5", f"=SUM(H2:H{length})")
-        worksheet.write("Q5", f"=SUM(G2:G{length})", euro)
+        worksheet.write_formula("Q5", f"=SUM(I2:I{length})")
+        worksheet.write("R5", f"=SUM(H2:H{length})", euro)
         # Total Treinos Dados
-        worksheet.write_formula("P6", f"=SUM(I2:I{length})")
-        worksheet.write("Q6", f"=SUM(K2:K{length})", euro)
+        worksheet.write_formula("Q6", f"=SUM(J2:J{length})")
+        worksheet.write("R6", f"=SUM(L2:L{length})", euro)
         # Total Treinos em Falta
-        worksheet.write_formula("P7", f"=SUM(L2:L{length})")
-        worksheet.write("Q7", f"=SUM(M2:M{length})", euro)
+        worksheet.write_formula("Q7", f"=SUM(M2:M{length})")
+        worksheet.write("R7", f"=SUM(N2:N{length})", euro)
         # A receber
-        worksheet.write("P9", f"=SUM(K2:K{length})", euro)
+        worksheet.write("Q9", f"=SUM(L2:L{length})", euro)
 
     writer.close()
     _save_client_since(client_since)

@@ -78,6 +78,10 @@ a.import-button[aria-disabled="true"] { pointer-events: none; cursor: default; o
 .static-table td { min-width: 72px; padding: 8px 10px; border: 1px solid #d9dee5; text-align: left; vertical-align: middle; }
 .static-table th { min-width: 72px; padding: 8px 10px; border: 1px solid #d9dee5; text-align: left; vertical-align: middle; background: #f3f4f6; font-weight: 600; }
 .static-table-actions-header { min-width: 0 !important; }
+.static-table-action-cell { min-width: 0 !important; white-space: nowrap; }
+.static-table-detail-row > td { padding: 0; }
+.edit-row-button { padding: 5px 8px; border: 1px solid #345f73; color: #345f73; background: white; cursor: pointer; font: inherit; }
+.edit-row-button:disabled { cursor: wait; opacity: 0.55; }
 .remove-row-button { padding: 5px 8px; border: 1px solid #a42f2f; color: #a42f2f; background: white; cursor: pointer; font: inherit; }
 .remove-row-button:disabled { cursor: wait; opacity: 0.55; }
 .static-table tr:first-child td { background: #f3f4f6; font-weight: 600; }
@@ -88,6 +92,7 @@ a.import-button[aria-disabled="true"] { pointer-events: none; cursor: default; o
 .static-table-input.no-number-spinner { -moz-appearance: textfield; }
 .static-table-euro-input { display: flex; align-items: center; gap: 4px; }
 .static-table-euro-input .static-table-input { min-width: 0; text-align: right; }
+.af-summary .static-table-input { width: 4.5rem; text-align: left; }
 .add-row-button { margin-top: 10px; padding: 8px 12px; border: 1px solid #6f42c1; color: #6f42c1; background: white; cursor: pointer; font: inherit; font-weight: 600; }
 .pt-add-row { display: grid; grid-template-columns: repeat(7, minmax(120px, 1fr)); gap: 8px; align-items: end; min-width: 900px; margin-top: 10px; padding: 10px; border: 1px solid #d9dee5; background: #f8f9fa; }
 .pt-add-row label { display: grid; gap: 4px; color: #495057; font-size: 0.75rem; font-weight: 700; }

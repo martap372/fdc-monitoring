@@ -175,6 +175,16 @@ const getWeeklySummaryTitle = (week) => {
   return `${monthAndYear} (Semana ${week.week_number})`;
 };
 
+const formatSummaryHours = (person, period, value) => {
+  const hours = Number(value) || 0;
+
+  if (person === 'Simão Sá' && period === 'Dias úteis' && hours > 0) {
+    return `${hours}h (${hours - 3}h + 3h)`;
+  }
+
+  return `${hours}h`;
+};
+
 const Calendar = () => {
   const [events, setEvents] = useState([]);
   const [calendarTitle, setCalendarTitle] = useState(getCalendarTitle(new Date()));
@@ -772,7 +782,7 @@ const Calendar = () => {
                   <tr key={period}>
                     <th>{period}</th>
                     {people.map((person) => (
-                      <td key={person}>{hours?.[person] || 0} h</td>
+                      <td key={person}>{formatSummaryHours(person, period, hours?.[person])}</td>
                     ))}
                   </tr>
                 ))}
@@ -826,12 +836,12 @@ const Calendar = () => {
                   .map((totals) => (
                   <tr key={totals.person}>
                     <th>{totals.person}</th>
-                    <td>{totals.weekday_hours.toFixed(0)} h</td>
-                    <td>{totals.saturday_hours.toFixed(0)} h</td>
-                    <td>{totals.sunday_hours.toFixed(0)} h</td>
-                    <td>{totals.weekday_saturday_value.toFixed(2)} €</td>
-                    <td>{totals.sunday_value.toFixed(2)} €</td>
-                    <td>{totals.total_value.toFixed(2)} €</td>
+                    <td>{totals.weekday_hours.toFixed(0)}h</td>
+                    <td>{totals.saturday_hours.toFixed(0)}h</td>
+                    <td>{totals.sunday_hours.toFixed(0)}h</td>
+                    <td>{totals.weekday_saturday_value.toFixed(2)}€</td>
+                    <td>{totals.sunday_value.toFixed(2)}€</td>
+                    <td>{totals.total_value.toFixed(2)}€</td>
                   </tr>
                 ))}
               </tbody>
@@ -841,7 +851,7 @@ const Calendar = () => {
                   <th>
                     {monthlyHours.totals
                       .reduce((sum, totals) => sum + totals.total_value, 0)
-                      .toFixed(2)} €
+                      .toFixed(2)}€
                   </th>
                 </tr>
               </tfoot>
