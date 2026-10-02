@@ -83,14 +83,15 @@ def _commission_rate(total_faturacao):
     return 0.6
 
 
-def _commission_rate_for_client(rate, member_number, month, year, client_since):
+def _commission_rate_for_client(rate, member_number, month, year, client_since, register=True):
     member = _member_key(member_number)
     if member is None:
         return rate
 
     start = client_since.get(member)
     if start is None:
-        client_since[member] = f'{month:02d}-{year}'
+        if register:
+            client_since[member] = f'{month:02d}-{year}'
         return rate
 
     start_month, start_year = (int(part) for part in start.split('-'))
@@ -220,9 +221,29 @@ def workbook_data(filename, include_styles=False, data_only=False):
             data_rows = [row for row in values[1:] if row and row[0] not in (None, '')]
             total_faturacao = sum(_number(row, 5) for row in data_rows)
             commission_rate = _commission_rate(total_faturacao)
+            period_match = re.fullmatch(r'PT_(.+)(\d{4})\.xlsx', filename)
+            if period_match and period_match.group(1) in meses:
+                month = meses.index(period_match.group(1)) + 1
+                year = int(period_match.group(2))
+                with open(CLIENT_SINCE_PATH, encoding='utf-8') as registry_file:
+                    client_since = json.load(registry_file)
+            else:
+                month = year = None
+                client_since = {}
             for row_index in range(1, len(values)):
                 if values[row_index] and values[row_index][0] not in (None, ''):
-                    values[row_index][6] = commission_rate
+                    values[row_index][6] = (
+                        _commission_rate_for_client(
+                            commission_rate,
+                            values[row_index][0],
+                            month,
+                            year,
+                            client_since,
+                            register=False,
+                        )
+                        if month is not None and year is not None
+                        else commission_rate
+                    )
                     values[row_index] = _pt_calculated_values(values[row_index])
             _pt_summary_values(values)
         if include_styles:
