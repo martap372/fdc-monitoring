@@ -218,7 +218,7 @@ def workbook_data(filename, include_styles=False, data_only=False):
                 row.pop(payment_column)
         if not include_styles:
             data_rows = [row for row in values[1:] if row and row[0] not in (None, '')]
-            total_faturacao = sum(_number(row, 4) for row in data_rows)
+            total_faturacao = sum(_number(row, 5) for row in data_rows)
             commission_rate = _commission_rate(total_faturacao)
             for row_index in range(1, len(values)):
                 if values[row_index] and values[row_index][0] not in (None, ''):

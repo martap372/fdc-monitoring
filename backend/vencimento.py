@@ -180,19 +180,19 @@ def _source_values(filename, sheet):
 	commission = 0
 	for row in range(2, worksheet.max_row + 1):
 		row_hours = worksheet.cell(row, 4).value
-		row_value = worksheet.cell(row, 5).value
+		row_value = worksheet.cell(row, 6).value
 		if isinstance(row_hours, (int, float)):
 			hours += row_hours
 		if isinstance(row_value, (int, float)):
 			value_with_vat += row_value
 
-		trainings_done = worksheet.cell(row, 9).value
-		total_trainings = worksheet.cell(row, 8).value
+		trainings_done = worksheet.cell(row, 10).value
+		total_trainings = worksheet.cell(row, 9).value
 		if isinstance(trainings_done, str) and trainings_done.isnumeric():
 			trainings_done = float(trainings_done)
 		if isinstance(total_trainings, str) and total_trainings.isnumeric():
 			total_trainings = float(total_trainings)
-		pt_rate = worksheet.cell(row, 6).value
+		pt_rate = worksheet.cell(row, 7).value
 		if isinstance(pt_rate, str):
 			try:
 				pt_rate = float(pt_rate)
@@ -203,8 +203,8 @@ def _source_values(filename, sheet):
 			commission += trainings_done * round(pt_commission / total_trainings, 2)
 
 	for row in range(2, worksheet.max_row + 1):
-		if worksheet.cell(row, 15).value == "Total Faturação":
-			summary_value = worksheet.cell(row, 16).value
+		if worksheet.cell(row, 16).value == "Total Faturação":
+			summary_value = worksheet.cell(row, 17).value
 			if isinstance(summary_value, (int, float)):
 				value_with_vat = summary_value
 			break
