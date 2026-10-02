@@ -138,6 +138,7 @@ def _pt_calculated_values(row):
 
 def _pt_summary_values(rows):
     data_rows = rows[1:]
+    added_marker_column = rows[0].index('Valor em Falta') + 1 if rows and 'Valor em Falta' in rows[0] else 14
     for row in rows:
         if len(row) > 16 and isinstance(row[15], str) and row[15]:
             row[16] = {
@@ -150,7 +151,7 @@ def _pt_summary_values(rows):
                 'Total Treinos Recuperados': sum(
                     _number(data_row, 9)
                     for data_row in data_rows
-                    if len(data_row) > 14 and data_row[14] == 'added'
+                    if len(data_row) > added_marker_column and data_row[added_marker_column] == 'added'
                 ),
                 'A receber': sum(_number(data_row, 11) for data_row in data_rows),
             }.get(row[15])
@@ -218,6 +219,7 @@ def workbook_data(filename, include_styles=False, data_only=False):
             for row in styles:
                 row.pop(payment_column)
         if not include_styles:
+            added_marker_column = values[0].index('Valor em Falta') + 1 if values and 'Valor em Falta' in values[0] else 14
             data_rows = [row for row in values[1:] if row and row[0] not in (None, '')]
             total_faturacao = sum(_number(row, 5) for row in data_rows)
             commission_rate = _commission_rate(total_faturacao)
@@ -232,18 +234,23 @@ def workbook_data(filename, include_styles=False, data_only=False):
                 client_since = {}
             for row_index in range(1, len(values)):
                 if values[row_index] and values[row_index][0] not in (None, ''):
-                    values[row_index][6] = (
-                        _commission_rate_for_client(
-                            commission_rate,
-                            values[row_index][0],
-                            month,
-                            year,
-                            client_since,
-                            register=False,
-                        )
-                        if month is not None and year is not None
-                        else commission_rate
+                    is_added = (
+                        len(values[row_index]) > added_marker_column
+                        and values[row_index][added_marker_column] == 'added'
                     )
+                    if not is_added:
+                        values[row_index][6] = (
+                            _commission_rate_for_client(
+                                commission_rate,
+                                values[row_index][0],
+                                month,
+                                year,
+                                client_since,
+                                register=False,
+                            )
+                            if month is not None and year is not None
+                            else commission_rate
+                        )
                     values[row_index] = _pt_calculated_values(values[row_index])
             _pt_summary_values(values)
         if include_styles:
