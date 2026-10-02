@@ -368,7 +368,7 @@ def import_(filename):
             # Horas
             data[pt]["Horas"].append((float(df[8][row-1].replace(" min", ""))*total)/60)
             # Valor c/iva
-            valor_c_iva = float(df[9][row-1]) * total
+            valor_c_iva = float(df[10][row-1]) * total
             data[pt]["Valor c/iva"].append(_round_to_nearest_005(valor_c_iva))
             # Total Treinos
             data[pt]["Total Treinos"].append(total)
