@@ -46,7 +46,7 @@ const PTs = () => {
 	const [saving, setSaving] = useState(false);
 	const [adding, setAdding] = useState(false);
 	const [editingRow, setEditingRow] = useState(null);
-	const [newRow, setNewRow] = useState({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', trainingsDone: '' });
+	const [newRow, setNewRow] = useState({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', totalTrainings: '', trainingsDone: '' });
 	useEffect(() => { rememberedMonth = selectedMonth; }, [selectedMonth]);
 	useEffect(() => { rememberedYear = selectedYear; }, [selectedYear]);
 	useEffect(() => { rememberedSheet = selectedSheet; }, [selectedSheet]);
@@ -184,7 +184,7 @@ const PTs = () => {
 			const refreshedWorkbook = await refreshedResponse.json();
 			setWorkbook(refreshedWorkbook);
 			setSheetData(refreshedWorkbook[selectedSheet] || []);
-			setNewRow({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', trainingsDone: '' });
+			setNewRow({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', totalTrainings: '', trainingsDone: '' });
 			setAdding(false);
 		} catch (addError) {
 			setError(addError.message);
@@ -201,6 +201,7 @@ const PTs = () => {
 			hours: String(row[3] ?? ''),
 			amount: String(row[5] ?? ''),
 			percentage: String(typeof row[6] === 'number' ? row[6] * 100 : row[6] ?? ''),
+			totalTrainings: String(row[8] ?? ''),
 			trainingsDone: String(row[9] ?? ''),
 		});
 		setAdding(false);
@@ -226,7 +227,7 @@ const PTs = () => {
 			setWorkbook(refreshedWorkbook);
 			setSheetData(refreshedWorkbook[selectedSheet] || []);
 			setEditingRow(null);
-			setNewRow({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', trainingsDone: '' });
+			setNewRow({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', totalTrainings: '', trainingsDone: '' });
 		} catch (updateError) {
 			setError(updateError.message);
 		} finally {
@@ -261,9 +262,10 @@ const PTs = () => {
 		<form className="pt-add-row" onSubmit={onSubmit}>
 			{[
 				['memberNumber', 'Nº Sócio', 'text'], ['clientName', 'Nome do Cliente', 'text'], ['contract', 'Contrato', 'text'],
-				['hours', 'Horas', 'number'], ['amount', 'Valor c/iva', 'number'], ['percentage', '%', 'number'], ['trainingsDone', 'Treinos Dados', 'number'],
+				['hours', 'Horas', 'number'], ['amount', 'Valor c/iva', 'number'], ['percentage', '%', 'number'],
+				['totalTrainings', 'Total Treinos', 'number'], ['trainingsDone', 'Treinos Dados', 'number'],
 			].map(([field, label, type]) => (
-				<label key={field}>{label}<input required type={type} min="0" max={field === 'percentage' ? 100 : undefined} step={type === 'number' ? 'any' : undefined} value={newRow[field]} onChange={(event) => setNewRow((current) => ({ ...current, [field]: event.target.value }))} /></label>
+				<label key={field}>{label}<input required type={type} min="0" max={field === 'percentage' ? 100 : undefined} step={field === 'totalTrainings' ? 1 : type === 'number' ? 'any' : undefined} value={newRow[field]} onChange={(event) => setNewRow((current) => ({ ...current, [field]: event.target.value }))} /></label>
 			))}
 			<div className="pt-add-row-actions"><button type="submit" disabled={saving}>{submitLabel}</button><button type="button" onClick={() => { setAdding(false); setEditingRow(null); }} disabled={saving}>Cancelar</button></div>
 		</form>
@@ -343,7 +345,7 @@ const PTs = () => {
 							) : null}
 							rowDetails={(_, rowIndex) => editingRow === rowIndex ? renderRowForm(updateRow, 'Guardar') : null}
 						/>
-						{adding ? renderRowForm(addRow, 'Adicionar') : editingRow == null && <button className="add-row-button" type="button" onClick={() => { setNewRow({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', trainingsDone: '' }); setAdding(true); }} disabled={saving}>Adicionar cliente</button>}
+						{adding ? renderRowForm(addRow, 'Adicionar') : editingRow == null && <button className="add-row-button" type="button" onClick={() => { setNewRow({ memberNumber: '', clientName: '', contract: '', hours: '', amount: '', percentage: '', totalTrainings: '', trainingsDone: '' }); setAdding(true); }} disabled={saving}>Adicionar cliente</button>}
 						<section className="pts-summary" aria-label="Resumo da folha">
 							<h2>Resumo</h2>
 							<StaticTable

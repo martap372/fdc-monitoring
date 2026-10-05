@@ -450,6 +450,7 @@ def add_pt_row(filename):
         percentage = positive_number('percentage', '%')
         if percentage > 100:
             raise ValueError('% deve ser um valor entre 0 e 100')
+        total_trainings = positive_number('totalTrainings', 'Total Treinos', integer=True)
         trainings_done = positive_number('trainingsDone', 'Treinos Dados', integer=True)
     except ValueError as validation_error:
         return jsonify({'error': str(validation_error)}), 400
@@ -485,7 +486,7 @@ def add_pt_row(filename):
         worksheet.cell(new_row, 6).value = amount
         worksheet.cell(new_row, 7).value = percentage / 100
         worksheet.cell(new_row, 8).value = f'=ROUND(F{new_row}*G{new_row}/1.23,2)'
-        worksheet.cell(new_row, 9).value = hours
+        worksheet.cell(new_row, 9).value = total_trainings
         worksheet.cell(new_row, 10).value = trainings_done
         worksheet.cell(new_row, 11).value = f'=ROUND(H{new_row}/I{new_row},2)'
         worksheet.cell(new_row, 12).value = f'=J{new_row}*K{new_row}'
@@ -557,6 +558,7 @@ def update_pt_row(filename, row):
         percentage = positive_number('percentage', '%')
         if percentage > 100:
             raise ValueError('% deve ser um valor entre 0 e 100')
+        total_trainings = positive_number('totalTrainings', 'Total Treinos', integer=True)
         trainings_done = positive_number('trainingsDone', 'Treinos Dados', integer=True)
     except ValueError as validation_error:
         return jsonify({'error': str(validation_error)}), 400
@@ -583,7 +585,7 @@ def update_pt_row(filename, row):
         worksheet.cell(excel_row, 6).value = amount
         worksheet.cell(excel_row, 7).value = percentage / 100
         worksheet.cell(excel_row, 8).value = f'=ROUND(F{excel_row}*G{excel_row}/1.23,2)'
-        worksheet.cell(excel_row, 9).value = hours
+        worksheet.cell(excel_row, 9).value = total_trainings
         worksheet.cell(excel_row, 10).value = trainings_done
         worksheet.cell(excel_row, 11).value = f'=ROUND(H{excel_row}/I{excel_row},2)'
         worksheet.cell(excel_row, 12).value = f'=J{excel_row}*K{excel_row}'
