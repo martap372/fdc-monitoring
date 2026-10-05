@@ -14,7 +14,6 @@ PEOPLE = (
     'Daniel Araújo',
     'Emanuel Ferreira',
     'Pedro Freitas',
-    'Rúben Ramos',
     'Simão Sá',
 )
 
@@ -41,6 +40,10 @@ from uuid import uuid4
 
 
 app = Flask(__name__)
+
+
+def _active_people_sheets(workbook):
+    return {sheet: values for sheet, values in workbook.items() if sheet in PEOPLE}
 
 
 def vencimento_files():
@@ -93,7 +96,7 @@ def get_pt_files():
 def get_pt_workbook(filename):
     if filename not in pt_files():
         return jsonify({'error': 'Ficheiro PT não encontrado'}), 404
-    return jsonify(workbook_data(filename))
+    return jsonify(_active_people_sheets(workbook_data(filename)))
 
 
 @app.get('/api/pt-files/<filename>/download')
@@ -112,7 +115,7 @@ def get_af_files():
 def get_af_workbook(filename):
     if filename not in af_files():
         return jsonify({'error': 'Ficheiro AF não encontrado'}), 404
-    return jsonify(af_workbook_data(filename))
+    return jsonify(_active_people_sheets(af_workbook_data(filename)))
 
 
 @app.get('/api/af-files/<filename>/download')
@@ -163,7 +166,7 @@ def get_planos_files():
 def get_planos_workbook(filename):
     if filename not in planos_files():
         return jsonify({'error': 'Ficheiro de planos não encontrado'}), 404
-    return jsonify(planos_workbook_data(filename))
+    return jsonify(_active_people_sheets(planos_workbook_data(filename)))
 
 
 @app.get('/api/planos-files/<filename>/download')
@@ -278,7 +281,7 @@ def get_vencimento_status():
 def get_vencimento_workbook(filename):
     if filename not in vencimento_files():
         return jsonify({'error': 'Ficheiro de vencimentos não encontrado'}), 404
-    return jsonify(workbook_data(filename, include_styles=True, data_only=True))
+    return jsonify(_active_people_sheets(workbook_data(filename, include_styles=True, data_only=True)))
 
 
 @app.get('/api/vencimento-files/<filename>/download')
@@ -683,7 +686,7 @@ def delete_pt_row(filename, row):
 
 @app.get('/api/events')
 def get_events():
-    return jsonify(read_events())
+    return jsonify([event for event in read_events() if event.get('title') in PEOPLE])
 
 
 @app.get('/api/weekly-hours')
@@ -713,6 +716,8 @@ def get_monthly_hours():
 @app.post('/api/events')
 def create_event():
     event = request.get_json(silent=True) or {}
+    if event.get('title') not in PEOPLE:
+        return jsonify({'error': 'Pessoa inválida'}), 400
     event['id'] = event.get('id') or str(uuid4())
     add_day_of_week(event)
     events = read_events()

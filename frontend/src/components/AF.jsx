@@ -12,7 +12,6 @@ const PEOPLE = [
 	'Daniel Araújo',
 	'Emanuel Ferreira',
 	'Pedro Freitas',
-	'Rúben Ramos',
 	'Simão Sá',
 ];
 const CURRENT_YEAR = new Date().getFullYear();

@@ -171,7 +171,7 @@ def build_weekly_hours(events):
 		start = parse_event_date(event.get('start'))
 		end = parse_event_date(event.get('end'))
 		person = event.get('title')
-		if not start or not end or not person or end <= start:
+		if not start or not end or person not in app.PEOPLE or end <= start:
 			continue
 
 		cursor = start

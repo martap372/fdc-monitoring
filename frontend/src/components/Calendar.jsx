@@ -19,7 +19,6 @@ const personColors = {
   'Daniel Araújo': '#0891b2',
   'Emanuel Ferreira': '#9333ea',
   'Pedro Freitas': '#ea580c',
-  'Rúben Ramos': '#dc2626',
   'Simão Sá': '#16a34a',
 };
 
@@ -215,7 +214,7 @@ const Calendar = () => {
         }
         return response.json();
       })
-      .then(setEvents)
+      .then((loadedEvents) => setEvents(loadedEvents.filter((event) => Object.prototype.hasOwnProperty.call(personColors, event.title))))
       .catch((error) => console.error(error));
   }, []);
 
@@ -252,7 +251,6 @@ const Calendar = () => {
     'Daniel Araújo',
     'Emanuel Ferreira',
     'Pedro Freitas',
-    'Rúben Ramos',
     'Simão Sá',
   ];
 

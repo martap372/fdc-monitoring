@@ -17,14 +17,12 @@ data = {"André Mota": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [],
     "Simão Sá": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
     "Pedro Freitas": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
     "Emanuel Ferreira": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
-    "Rúben Ramos": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""},
     "Daniel Araújo": {"Nº Sócio": [], "Nome do Cliente": [], "Contrato": [], "Horas": [], "Fecho/Contínuo": [], "Valor c/iva": [], "%": [], "Comissão PT": "", "Total Treinos": [], "Treinos Dados": "", "Valor/Treino": "", "A receber": "", "Treinos em Falta": "", "Valor em Falta": ""}}
 
 resumo = {"André Mota": {"Total Clientes": [], "Total Horas": [], "Total Faturação": [], "Total Treinos Pagos": [], "Total Treinos Dados": [], "Total Treinos em Falta": [], "Total Treinos Recuperados": [], "A receber": []},
         "Simão Sá": {"Total Clientes": [], "Total Horas": [], "Total Faturação": [], "Total Treinos Pagos": [], "Total Treinos Dados": [], "Total Treinos em Falta": [], "Total Treinos Recuperados": [], "A receber": []},
         "Pedro Freitas": {"Total Clientes": [], "Total Horas": [], "Total Faturação": [], "Total Treinos Pagos": [], "Total Treinos Dados": [], "Total Treinos em Falta": [], "Total Treinos Recuperados": [], "A receber": []},
         "Emanuel Ferreira": {"Total Clientes": [], "Total Horas": [], "Total Faturação": [], "Total Treinos Pagos": [], "Total Treinos Dados": [], "Total Treinos em Falta": [], "Total Treinos Recuperados": [], "A receber": []},
-        "Rúben Ramos": {"Total Clientes": [], "Total Horas": [], "Total Faturação": [], "Total Treinos Pagos": [], "Total Treinos Dados": [], "Total Treinos em Falta": [], "Total Treinos Recuperados": [], "A receber": []},
         "Daniel Araújo": {"Total Clientes": [], "Total Horas": [], "Total Faturação": [], "Total Treinos Pagos": [], "Total Treinos Dados": [], "Total Treinos em Falta": [], "Total Treinos Recuperados": [], "A receber": []}}
 
 
