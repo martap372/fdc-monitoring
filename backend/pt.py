@@ -109,6 +109,43 @@ def _save_client_since(client_since):
     os.replace(temporary_path, CLIENT_SINCE_PATH)
 
 
+def _save_pt_rates(filename, updates):
+    if not updates:
+        return False
+
+    workbook_path = os.path.join(BACKEND_DIR, filename)
+    temporary_path = f'{workbook_path}.tmp'
+    changed = False
+    with WORKBOOK_LOCK:
+        workbook = load_workbook(workbook_path, data_only=False)
+        try:
+            for sheet_name, sheet_updates in updates.items():
+                if sheet_name not in workbook.sheetnames:
+                    continue
+                worksheet = workbook[sheet_name]
+                headers = [cell.value for cell in worksheet[1]]
+                try:
+                    rate_column = headers.index('%') + 1
+                except ValueError:
+                    continue
+
+                for row_number, rate in sheet_updates:
+                    cell = worksheet.cell(row=row_number, column=rate_column)
+                    if isinstance(cell.value, (int, float)) and round(cell.value, 2) == rate:
+                        continue
+                    cell.value = rate
+                    changed = True
+
+            if changed:
+                workbook.save(temporary_path)
+                os.replace(temporary_path, workbook_path)
+        finally:
+            workbook.close()
+            if os.path.exists(temporary_path):
+                os.remove(temporary_path)
+    return changed
+
+
 def pt_client_status(member_number, filename):
     match = re.fullmatch(r'PT_(.+)(\d{4})\.xlsx', os.path.basename(filename))
     if not match or match.group(1) not in meses:
@@ -180,6 +217,8 @@ def workbook_data(filename, include_styles=False, data_only=False):
         }
 
     result = {}
+    rate_updates = {}
+    persist_rates = not include_styles and not data_only
     for worksheet in workbook.worksheets:
         values = []
         styles = []
@@ -237,7 +276,8 @@ def workbook_data(filename, include_styles=False, data_only=False):
                         and values[row_index][added_marker_column] == 'added'
                     )
                     if not is_added:
-                        values[row_index][6] = (
+                        previous_rate = values[row_index][6]
+                        rate = (
                             _commission_rate_for_client(
                                 commission_rate,
                                 values[row_index][0],
@@ -249,6 +289,14 @@ def workbook_data(filename, include_styles=False, data_only=False):
                             if month is not None and year is not None
                             else commission_rate
                         )
+                        if persist_rates and (
+                            not isinstance(previous_rate, (int, float))
+                            or round(previous_rate, 2) != round(rate, 2)
+                        ):
+                            rate_updates.setdefault(worksheet.title, []).append(
+                                (row_index + 1, round(rate, 2))
+                            )
+                        values[row_index][6] = rate
                     values[row_index] = _pt_calculated_values(values[row_index])
             _pt_summary_values(values)
         if include_styles:
@@ -278,6 +326,12 @@ def workbook_data(filename, include_styles=False, data_only=False):
             }
         else:
             result[worksheet.title] = values
+    workbook.close()
+    if _save_pt_rates(filename, rate_updates):
+        period_match = re.fullmatch(r'PT_(.+)(\d{4})\.xlsx', filename)
+        if period_match and period_match.group(1) in meses:
+            from mapa_sala import schedule_vencimento_update
+            schedule_vencimento_update(year=int(period_match.group(2)))
     return result
 
 
