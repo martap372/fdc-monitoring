@@ -27,6 +27,7 @@ from mapa_sala import (
     write_events,
 )
 from pt import BACKEND_DIR, WORKBOOK_LOCK, import_, pt_client_status, pt_files, workbook_data
+from pt_pdf import build_pt_export_pdf
 from af import MONTHS as AF_MONTHS, af_files, af_workbook_data, import_ as import_af
 from planos import planos_files, planos_workbook_data, import_ as import_planos
 from convert import convert_xls
@@ -104,6 +105,50 @@ def download_pt_workbook(filename):
     if filename not in pt_files():
         return jsonify({'error': 'Ficheiro PT não encontrado'}), 404
     return send_file(os.path.join(BACKEND_DIR, filename), as_attachment=True, download_name=filename)
+
+
+@app.get('/api/pt-files/<filename>/pdf')
+def download_pt_pdf(filename):
+    if filename not in pt_files():
+        return jsonify({'error': 'Ficheiro PT não encontrado'}), 404
+
+    sheet_name = request.args.get('sheet', '')
+    if sheet_name not in PEOPLE:
+        return jsonify({'error': 'Folha PT inválida'}), 400
+
+    period_match = re.fullmatch(r'PT_(.+)(\d{4})\.xlsx', filename)
+    if not period_match or period_match.group(1) not in AF_MONTHS:
+        return jsonify({'error': 'Período PT inválido'}), 400
+    month_name = period_match.group(1)
+    month_index = AF_MONTHS.index(month_name)
+    year = int(period_match.group(2))
+
+    pt_workbook = workbook_data(filename)
+    pt_sheet = pt_workbook.get(sheet_name)
+    if not pt_sheet:
+        return jsonify({'error': 'Folha PT não encontrada'}), 404
+
+    vencimento_filename = f'Vencimento_{year}.xlsx'
+    vencimento_path = os.path.join(BACKEND_DIR, vencimento_filename)
+    if not os.path.exists(vencimento_path):
+        generate_vencimento(year=year)
+    vencimento_workbook = workbook_data(
+        vencimento_filename, include_styles=True, data_only=True
+    )
+    vencimento_sheet = vencimento_workbook.get(sheet_name)
+    if not vencimento_sheet:
+        return jsonify({'error': 'Folha correspondente não encontrada no vencimento'}), 404
+
+    pdf_buffer = build_pt_export_pdf(
+        pt_sheet, vencimento_sheet, month_name, year, sheet_name, month_index
+    )
+    download_name = f'{sheet_name.split()[0]}_{month_name}{year}.pdf'
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=download_name,
+    )
 
 
 @app.get('/api/af-files')

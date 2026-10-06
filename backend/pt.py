@@ -479,16 +479,52 @@ def import_(filename):
             # Valor em Falta
             worksheet.write_formula(row, 13, f"=K{row + 1}*M{row + 1}")
 
-        percent = workbook.add_format({"num_format": "0%"})
-        euro = workbook.add_format({"num_format": "0.00€"})
-        header = workbook.add_format({'bold': True, 'align': 'center'})
-        worksheet.set_column("F:F", None, euro)
-        worksheet.set_column("G:G", None, percent)
-        worksheet.set_column("H:H", None, euro)
-        worksheet.set_column("K:L", None, euro)
-        worksheet.set_column("N:N", None, euro)
+        cell_style = {
+            "border": 1,
+            "border_color": "#d9dee5",
+            "align": "left",
+            "valign": "vcenter",
+        }
+        table_cell = workbook.add_format(cell_style)
+        percent = workbook.add_format({**cell_style, "num_format": "0%"})
+        euro = workbook.add_format({**cell_style, "num_format": "0.00€"})
+        header = workbook.add_format({
+            **cell_style,
+            "bold": True,
+            "bg_color": "#f3f4f6",
+        })
+        summary_label = workbook.add_format({
+            **cell_style,
+            "bold": True,
+            "bg_color": "#f3f4f6",
+        })
+        main_widths = []
+        for column_index, heading in enumerate(df1.columns):
+            display_values = [str(heading)]
+            for value in df1.iloc[:, column_index]:
+                if pd.isna(value) or value == "":
+                    continue
+                if isinstance(value, (int, float)) and column_index in (5, 7, 10, 11, 13):
+                    value = f"{value:.2f}€"
+                elif isinstance(value, (int, float)) and column_index == 6:
+                    value = f"{value:.0%}"
+                display_values.append(str(value))
+            width = min(max(max(map(len, display_values)) + 2, 13), 36)
+            main_widths.append(width)
+            worksheet.set_column(column_index, column_index, width, table_cell)
+        for column_index in (5, 7, 10, 11, 13):
+            worksheet.set_column(
+                column_index, column_index, main_widths[column_index], euro
+            )
+        worksheet.set_column(6, 6, main_widths[6], percent)
+        worksheet.set_column(14, 14, 2)
+        summary_label_width = min(
+            max(max(map(len, map(str, df2.columns))) + 2, 13),
+            36,
+        )
+        worksheet.set_column(15, 15, summary_label_width, summary_label)
+        worksheet.set_column(16, 17, 16, table_cell)
         worksheet.set_row(0, None, header)
-        worksheet.set_column("P:P", None, header)
 
         # Total Clientes
         worksheet.write_formula("Q2", f"=COUNT(A2:A{length})")

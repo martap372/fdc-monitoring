@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import StaticTable from './StaticTable';
+
+const MONTHS = [
+	'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+	'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
+const CURRENT_YEAR = new Date().getFullYear();
+let rememberedYear = CURRENT_YEAR;
 
 const API_HOST = window.location.hostname || 'localhost';
 const API_URLS = process.env.REACT_APP_API_URL
@@ -35,6 +42,9 @@ const readJson = async (response) => {
 let rememberedSheet = '';
 
 const Vencimento = () => {
+	const [files, setFiles] = useState([]);
+	const [selectedMonth, setSelectedMonth] = useState(null);
+	const [selectedYear, setSelectedYear] = useState(() => rememberedYear);
 	const [workbook, setWorkbook] = useState(null);
 	const [filename, setFilename] = useState('');
 	const [selectedSheet, setSelectedSheet] = useState(() => rememberedSheet);
@@ -46,7 +56,26 @@ const Vencimento = () => {
 	const isSimaoSheet = selectedSheet === 'Simão Sá';
 	const isWideSheet = isPedroSheet || isSimaoSheet;
 	const editableColumns = isPedroSheet ? [12, 15] : isSimaoSheet ? [14] : [13];
+	useEffect(() => { rememberedYear = selectedYear; }, [selectedYear]);
 	useEffect(() => { rememberedSheet = selectedSheet; }, [selectedSheet]);
+	const years = useMemo(() => (
+		[...new Set([CURRENT_YEAR, ...files.map((file) => file.year)])].sort((a, b) => b - a)
+	), [files]);
+	const selectedFile = files.find((file) => file.year === selectedYear);
+	const tableRows = useMemo(() => {
+		const rows = workbook?.[selectedSheet]?.values || [];
+		if (selectedMonth === null) return rows;
+		if (rows.length < 2) return rows;
+		const monthRow = rows[selectedMonth + 2];
+		return monthRow ? [...rows.slice(0, 2), monthRow] : rows.slice(0, 2);
+	}, [workbook, selectedSheet, selectedMonth]);
+	const tableStyles = useMemo(() => {
+		const styles = workbook?.[selectedSheet]?.styles || [];
+		if (selectedMonth === null) return styles;
+		if (styles.length < 2) return styles;
+		const monthStyles = styles[selectedMonth + 2];
+		return monthStyles ? [...styles.slice(0, 2), monthStyles] : styles.slice(0, 2);
+	}, [workbook, selectedSheet, selectedMonth]);
 
 	const loadWorkbook = useCallback(async () => {
 		setLoading(true);
@@ -55,16 +84,26 @@ const Vencimento = () => {
 			try {
 			const filesResponse = await fetchFromApi('/api/vencimento-files');
 			if (!filesResponse.ok) throw new Error('Não foi possível carregar o ficheiro de vencimentos.');
-			const files = await readJson(filesResponse);
-			if (!files.length) throw new Error('Não existe um ficheiro de vencimentos.');
-			const currentFilename = files[files.length - 1];
+			const filenames = await readJson(filesResponse);
+			const nextFiles = filenames.map((name) => {
+				const match = name.match(/^Vencimento_(\d{4})\.xlsx$/);
+				return match ? { filename: name, year: Number(match[1]) } : null;
+			}).filter(Boolean);
+			setFiles(nextFiles);
+			const currentFile = nextFiles.find((file) => file.year === selectedYear);
+			if (!currentFile) {
+				setWorkbook(null);
+				setFilename('');
+				setLoading(false);
+				return;
+			}
 			const workbookResponse = await fetchFromApi(
-				`/api/vencimento-files/${encodeURIComponent(currentFilename)}`
+				`/api/vencimento-files/${encodeURIComponent(currentFile.filename)}`
 			);
 			if (!workbookResponse.ok) throw new Error('Não foi possível carregar o mapa de vencimentos.');
 			const nextWorkbook = await readJson(workbookResponse);
 			setWorkbook(nextWorkbook);
-			setFilename(currentFilename);
+			setFilename(currentFile.filename);
 			setSelectedSheet((currentSheet) => (
 				currentSheet && nextWorkbook[currentSheet]
 					? currentSheet
@@ -80,7 +119,7 @@ const Vencimento = () => {
 				}
 			}
 		}
-	}, []);
+	}, [selectedYear]);
 
 	const saveCell = async (value, row, column) => {
 		if (!filename || !editableColumns.includes(column)) return;
@@ -152,12 +191,26 @@ const Vencimento = () => {
 
 	return (
 		<main className="vencimento-page">
+			<section className="pts-toolbar vencimento-toolbar" aria-label="Filtros dos vencimentos">
+				<label>Mês<select value={selectedMonth ?? ''} onChange={(event) => setSelectedMonth(event.target.value === '' ? null : Number(event.target.value))}><option value="">-</option>{MONTHS.map((month, index) => <option value={index} key={month}>{month}</option>)}</select></label>
+				<label>Ano<select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>{years.map((year) => <option value={year} key={year}>{year}</option>)}</select></label>
+				<a
+					className="import-button"
+					href={selectedFile ? `${API_URLS[0]}/api/vencimento-files/${encodeURIComponent(selectedFile.filename)}/download` : undefined}
+					download={selectedFile?.filename}
+					aria-disabled={!selectedFile}
+					onClick={(event) => { if (!selectedFile) event.preventDefault(); }}
+				>
+					Exportar
+				</a>
+			</section>
 			{error && <p className="vencimento-error" role="alert">{error}</p>}
 			{loading && (
 				<p className="vencimento-status" role="status" aria-live="polite">
 					{'A carregar...'}
 				</p>
 			)}
+			{!loading && !error && !workbook && <p className="pts-unavailable">Dados indisponíveis</p>}
 			{!loading && workbook && (
 					<section className={`vencimento-workbook${isWideSheet ? ' vencimento-workbook-wide' : ''}`} aria-label="Mapa de vencimentos">
 					<nav className="sheet-tabs" aria-label="Folhas de vencimentos">
@@ -172,28 +225,17 @@ const Vencimento = () => {
 								{sheet}
 							</button>
 						))}
-						<div className="vencimento-actions">
-							{saving && <span className="sheet-saving-status">A guardar...</span>}
-							<a
-								className="import-button"
-								href={filename ? `${API_URLS[0]}/api/vencimento-files/${encodeURIComponent(filename)}/download` : undefined}
-								download={filename || undefined}
-								aria-disabled={!filename}
-								onClick={(event) => { if (!filename) event.preventDefault(); }}
-							>
-								Exportar
-							</a>
-						</div>
+						{saving && <span className="sheet-saving-status">A guardar...</span>}
 					</nav>
 					<div className="spreadsheet-wrap">
 						<StaticTable
-							rows={workbook[selectedSheet]?.values || []}
-							styles={workbook[selectedSheet]?.styles}
+							rows={tableRows}
+							styles={tableStyles}
 							mergeData={workbook[selectedSheet]?.mergeData}
 											numberFormats={isPedroSheet ? { 6: '0', 15: '0.00€' } : isSimaoSheet ? { 6: '0', 14: '0.00€' } : { 6: '0', 13: '0.00€' }}
 											editableColumns={editableColumns}
-									editableRows={Array.from({ length: 12 }, (_, index) => index + 2)}
-									onCellChange={saveCell}
+											editableRows={selectedMonth === null ? Array.from({ length: 12 }, (_, index) => index + 2) : [2]}
+											onCellChange={(value, row, column) => saveCell(value, selectedMonth === null ? row : selectedMonth + row, column)}
 								disabled={saving}
 							label={`Folha ${selectedSheet}`}
 							sectionDividerColumns={isPedroSheet ? [0, 4, 8, 11, 13] : [0, 4, 8, 11]}

@@ -286,16 +286,28 @@ const PTs = () => {
 						{years.map((year) => <option value={year} key={year}>{year}</option>)}
 					</select>
 				</label>
-				<a
-					className="import-button"
-					href={selectedFile ? `${API_URL}/api/pt-files/${encodeURIComponent(selectedFile.filename)}/download` : undefined}
-					download={selectedFile?.filename}
-					aria-disabled={!selectedFile || saving}
-					tabIndex={selectedFile && !saving ? 0 : -1}
-					onClick={(event) => { if (!selectedFile || saving) event.preventDefault(); }}
-				>
-					Exportar
-				</a>
+				<details className="export-dropdown">
+					<summary className="import-button">Exportar</summary>
+					<div className="export-menu">
+						<a
+							href={selectedFile && selectedSheet ? `${API_URL}/api/pt-files/${encodeURIComponent(selectedFile.filename)}/pdf?sheet=${encodeURIComponent(selectedSheet)}` : undefined}
+							aria-disabled={!selectedFile || !selectedSheet || saving}
+							tabIndex={selectedFile && selectedSheet && !saving ? 0 : -1}
+							onClick={(event) => { if (!selectedFile || !selectedSheet || saving) event.preventDefault(); }}
+						>
+							PDF
+						</a>
+						<a
+							href={selectedFile ? `${API_URL}/api/pt-files/${encodeURIComponent(selectedFile.filename)}/download` : undefined}
+							download={selectedFile?.filename}
+							aria-disabled={!selectedFile || saving}
+							tabIndex={selectedFile && !saving ? 0 : -1}
+							onClick={(event) => { if (!selectedFile || saving) event.preventDefault(); }}
+						>
+							Excel
+						</a>
+					</div>
+				</details>
 				<button className="import-button" type="button" onClick={() => fileInput.current?.click()} disabled={importing || saving}>
 					{importing ? 'A importar...' : 'Importar'}
 				</button>

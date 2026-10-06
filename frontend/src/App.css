@@ -64,6 +64,23 @@ a.import-button[aria-disabled="true"] { pointer-events: none; cursor: default; o
 
 .pts-toolbar > a.import-button { margin-left: auto; }
 .pts-toolbar > button.import-button { margin-left: 0; }
+.pts-toolbar > .export-dropdown { position: relative; margin-left: auto; }
+.export-dropdown > summary { display: inline-flex; align-items: center; list-style: none; }
+.export-dropdown > summary::-webkit-details-marker { display: none; }
+.export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 120px;
+  padding: 4px;
+  border: 1px solid #d9dee5;
+  background: white;
+  box-shadow: 0 4px 12px rgba(18, 52, 77, 0.16);
+}
+.export-menu a { display: block; padding: 8px 10px; color: #212529; text-decoration: none; white-space: nowrap; }
+.export-menu a:hover, .export-menu a:focus-visible { background: #f3f4f6; }
+.export-menu a[aria-disabled="true"] { pointer-events: none; color: #6c757d; }
 .pts-status, .pts-error, .pts-unavailable { max-width: 1180px; margin: 52px auto; text-align: center; }
 .pts-error { color: #a42f2f; }
 .pts-unavailable { color: #6c757d; font-size: 1.25rem; }
@@ -160,6 +177,18 @@ a.import-button[aria-disabled="true"] { pointer-events: none; cursor: default; o
   justify-content: space-between;
   gap: 20px;
   margin-bottom: 18px;
+}
+
+.vencimento-toolbar > a.import-button {
+  align-self: center;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 8px 12px;
+  font-size: 1rem;
+  line-height: normal;
 }
 
 .vencimento-kicker {
@@ -277,6 +306,7 @@ a.import-button[aria-disabled="true"] { pointer-events: none; cursor: default; o
   .pts-page { padding: 28px 16px; }
   .pts-toolbar { align-items: stretch; flex-wrap: wrap; }
   .pts-toolbar > .import-button { margin-left: 0; }
+  .pts-toolbar > .export-dropdown { margin-left: 0; }
   .vencimento-page { padding: 28px 16px; }
   .vencimento-toolbar { align-items: flex-start; flex-direction: column; }
   .vencimento-actions { width: 100%; justify-content: space-between; }

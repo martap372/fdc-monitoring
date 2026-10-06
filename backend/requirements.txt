@@ -3,4 +3,5 @@ pandas
 xlrd
 xlsxwriter
 openpyxl
+reportlab
 gunicorn
