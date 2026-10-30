@@ -8,6 +8,7 @@ const MONTHS = [
 	'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ];
 const PEOPLE = [
+	'André Ferreira',
 	'André Mota',
 	'Daniel Araújo',
 	'Emanuel Ferreira',

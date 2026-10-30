@@ -10,6 +10,7 @@ from flask import Flask, jsonify, request, send_file
 from werkzeug.utils import secure_filename
 
 PEOPLE = (
+    'André Ferreira',
     'André Mota',
     'Daniel Araújo',
     'Emanuel Ferreira',

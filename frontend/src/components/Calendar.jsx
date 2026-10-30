@@ -15,6 +15,7 @@ const MONTHLY_HOURS_API_URL = `${process.env.REACT_APP_API_URL || 'http://localh
 let rememberedCalendarDate = null;
 
 const personColors = {
+  'André Ferreira': '#be123c',
   'André Mota': '#2563eb',
   'Daniel Araújo': '#0891b2',
   'Emanuel Ferreira': '#9333ea',
@@ -247,6 +248,7 @@ const Calendar = () => {
   }, [eventSelection, selectedEvent]);
 
   const people = [
+    'André Ferreira',
     'André Mota',
     'Daniel Araújo',
     'Emanuel Ferreira',
