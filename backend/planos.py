@@ -78,13 +78,15 @@ def _training_dates_by_member(source):
 	return training_dates
 
 
-def _mark_af_plans(filename, training_dates):
+def _mark_af_plans(filename, training_dates, person):
 	workbook_path = os.path.join(BACKEND_DIR, filename)
 	if not os.path.exists(workbook_path):
 		return
 	workbook = load_workbook(workbook_path)
 	changed = False
 	for worksheet in workbook.worksheets:
+		if worksheet.title != person:
+			continue
 		headers = [cell.value for cell in worksheet[1]]
 		try:
 			member_column = headers.index('Nº de Sócio') + 1
@@ -180,9 +182,9 @@ def import_(filename, person):
 		workbook.save(temporary_path)
 		os.replace(temporary_path, output_path)
 		workbook.close()
-		_mark_af_plans(af_filename, training_dates)
+		_mark_af_plans(af_filename, training_dates, person)
 		if month > 1:
-			_mark_af_plans(f'AF_{MONTHS[month - 2]}{year}.xlsx', training_dates)
+			_mark_af_plans(f'AF_{MONTHS[month - 2]}{year}.xlsx', training_dates, person)
 
 	from vencimento import generate_vencimento
 	generate_vencimento(year=year)

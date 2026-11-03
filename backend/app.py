@@ -289,17 +289,27 @@ def update_af_cell(filename):
     row = changes.get('row')
     column = changes.get('column')
     value = changes.get('value')
-    if not isinstance(sheet_name, str) or not isinstance(row, int) or column != 4:
+    if not isinstance(sheet_name, str) or not isinstance(row, int) or column not in (4, 7):
         return jsonify({'error': 'Dados da célula inválidos'}), 400
-    if row < 1 or not isinstance(value, str) or not value.strip():
+    if row < 1:
+        return jsonify({'error': 'Linha inválida'}), 400
+    if column == 4 and (not isinstance(value, str) or not value.strip()):
         return jsonify({'error': 'Plano de Treino inválido'}), 400
+    if column == 7 and value not in ('Sim', 'Não'):
+        return jsonify({'error': 'Fecho deve ser Sim ou Não'}), 400
 
     workbook_path = os.path.join(BACKEND_DIR, filename)
     with WORKBOOK_LOCK:
         workbook = load_workbook(workbook_path)
         if sheet_name not in workbook.sheetnames:
+            workbook.close()
             return jsonify({'error': 'Folha não encontrada'}), 404
-        cell = workbook[sheet_name].cell(row=row + 1, column=column + 1)
+        worksheet = workbook[sheet_name]
+        expected_header = 'Plano de Treino' if column == 4 else 'Fecho'
+        if worksheet.cell(1, column + 1).value != expected_header or row + 1 > worksheet.max_row:
+            workbook.close()
+            return jsonify({'error': 'Célula inválida'}), 400
+        cell = worksheet.cell(row=row + 1, column=column + 1)
         cell.value = value
         temporary_path = f'{workbook_path}.tmp'
         workbook.save(temporary_path)
