@@ -51,6 +51,12 @@ const AF = () => {
 	const [selectedPerson, setSelectedPerson] = useState(PEOPLE[0]);
 	const [summaryError, setSummaryError] = useState('');
 	const [savingFecho, setSavingFecho] = useState(false);
+	const [fechosOverride, setFechosOverride] = useState(null);
+	const [fechosDraft, setFechosDraft] = useState(null);
+	const [savingFechos, setSavingFechos] = useState(false);
+	const fechosEditVersion = useRef(0);
+	const activeFechosSaves = useRef(0);
+	const fechosSaveQueue = useRef(Promise.resolve());
 	useEffect(() => { rememberedMonth = selectedMonth; }, [selectedMonth]);
 	useEffect(() => { rememberedYear = selectedYear; }, [selectedYear]);
 	useEffect(() => { rememberedSheet = selectedSheet; }, [selectedSheet]);
@@ -91,7 +97,7 @@ const AF = () => {
 		const calculatedFechos = fechoColumn < 0
 			? 0
 			: clientRows.filter((row) => row[fechoColumn] === 'Sim').length;
-		const fechos = calculatedFechos;
+		const fechos = fechosOverride ?? calculatedFechos;
 		const percentFecho = paidEvaluations
 			? Number((fechos / paidEvaluations).toFixed(4))
 			: 0;
@@ -110,7 +116,7 @@ const AF = () => {
 			['% Fecho', percentFechoDisplay],
 			['Valor por Avaliação', `${(paidEvaluations ? commissionPerEvaluation : 0).toFixed(0)}€`],
 		];
-	}, [rows]);
+	}, [rows, fechosOverride]);
 
 	const loadFiles = async () => {
 		const response = await fetch(`${API_URL}/api/af-files`);
@@ -128,17 +134,116 @@ const AF = () => {
 		setSelectedSheet((currentSheet) => data[currentSheet] ? currentSheet : firstSheet);
 	};
 
+	useEffect(() => {
+		if (!selectedFile || !selectedSheet) {
+			setFechosOverride(null);
+			setFechosDraft(null);
+			return undefined;
+		}
+
+		let cancelled = false;
+		const loadVersion = ++fechosEditVersion.current;
+		setFechosOverride(null);
+		setFechosDraft(null);
+		setSummaryError('');
+		fetch(`${API_URL}/api/af-files/${encodeURIComponent(selectedFile.filename)}/fechos?sheet=${encodeURIComponent(selectedSheet)}`)
+			.then(async (response) => {
+				const result = await readJson(response);
+				if (!response.ok) throw new Error(result.error || 'Não foi possível carregar os Fechos.');
+				if (!cancelled && loadVersion === fechosEditVersion.current) {
+					setFechosOverride(result.value);
+					setFechosDraft(result.value == null ? null : String(result.value));
+				}
+			})
+			.catch((loadError) => {
+				if (!cancelled) setSummaryError(loadError.message);
+			});
+		return () => { cancelled = true; };
+	}, [selectedFile, selectedSheet]);
+
+	const persistFechos = async ({ value, filename, sheet, version, previousValue }) => {
+		activeFechosSaves.current += 1;
+		setSavingFechos(true);
+		if (version === fechosEditVersion.current) setSummaryError('');
+		try {
+			const response = await fetch(
+				`${API_URL}/api/af-files/${encodeURIComponent(filename)}/fechos`,
+				{
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ sheet, value }),
+				}
+			);
+			const result = await readJson(response);
+			if (!response.ok) throw new Error(result.error || 'Não foi possível guardar os Fechos.');
+			if (
+				version === fechosEditVersion.current
+				&& selectedFileRef.current === filename
+				&& selectedSheetRef.current === sheet
+			) {
+				setFechosOverride(result.value);
+				setFechosDraft(String(result.value));
+			}
+		} catch (saveError) {
+			if (version === fechosEditVersion.current) {
+				setSummaryError(saveError.message);
+				setFechosOverride(previousValue);
+				setFechosDraft(previousValue == null ? null : String(previousValue));
+			}
+		} finally {
+			activeFechosSaves.current -= 1;
+			setSavingFechos(activeFechosSaves.current > 0);
+		}
+	};
+
+	const handleFechosInput = (value) => {
+		const version = ++fechosEditVersion.current;
+		setFechosDraft(value);
+		if (!/^\d+$/.test(value) || !selectedFile || !selectedSheet) return;
+
+		const previousValue = fechosOverride;
+		setFechosOverride(Number(value));
+		const pending = {
+			value,
+			filename: selectedFile.filename,
+			sheet: selectedSheet,
+			version,
+			previousValue,
+		};
+		fechosSaveQueue.current = fechosSaveQueue.current.then(
+			() => persistFechos(pending),
+			() => persistFechos(pending),
+		);
+	};
+
+	const commitFechosInput = () => {
+		if (!/^\d+$/.test(fechosDraft ?? '')) {
+			setFechosDraft(String(fechosOverride ?? summaryTableData[4]?.[1] ?? 0));
+		}
+	};
+
 	const updateFecho = async (rowIndex, value) => {
-		if (!selectedFile || !selectedSheet || fechoColumn < 0 || savingFecho) return;
+		if (!selectedFile || !selectedSheet || fechoColumn < 0 || savingFecho || savingFechos) return;
 
 		const filename = selectedFile.filename;
 		const sheet = selectedSheet;
 		const dataRowIndex = rowIndex + 1;
 		const previousValue = rows[dataRowIndex]?.[fechoColumn];
 		if (previousValue === value) return;
+		const previousFechosOverride = fechosOverride;
+		const expectedFechosOverride = previousFechosOverride == null
+			? null
+			: Math.max(
+				0,
+				previousFechosOverride + Number(value === 'Sim') - Number(previousValue === 'Sim'),
+			);
 
 		setSavingFecho(true);
 		setSummaryError('');
+		if (expectedFechosOverride != null) {
+			setFechosOverride(expectedFechosOverride);
+			setFechosDraft(String(expectedFechosOverride));
+		}
 		setWorkbook((currentWorkbook) => {
 			if (
 				selectedFileRef.current !== filename
@@ -169,8 +274,14 @@ const AF = () => {
 			);
 			const result = await readJson(response);
 			if (!response.ok) throw new Error(result.error || 'Não foi possível guardar o Fecho.');
+			if (result.fechos_override != null) {
+				setFechosOverride(result.fechos_override);
+				setFechosDraft(String(result.fechos_override));
+			}
 		} catch (saveError) {
 			setSummaryError(saveError.message);
+			setFechosOverride(previousFechosOverride);
+			setFechosDraft(previousFechosOverride == null ? null : String(previousFechosOverride));
 			setWorkbook((currentWorkbook) => {
 				if (
 					selectedFileRef.current !== filename
@@ -312,7 +423,7 @@ const AF = () => {
 														aria-label={`Fecho de ${row[1] || row[0]}`}
 														value={value ?? 'Não'}
 														onChange={(event) => updateFecho(rowIndex, event.target.value)}
-														disabled={savingFecho}
+														disabled={savingFecho || savingFechos}
 													>
 														<option value="Sim">Sim</option>
 														<option value="Não">Não</option>
@@ -331,7 +442,13 @@ const AF = () => {
 								rows={summaryTableData}
 								titleColumn
 								label={`Resumo das avaliações físicas ${selectedSheet}`}
+								editableColumns={[1]}
+								editableRows={[4]}
+								inputValues={{ '4:1': fechosDraft ?? summaryTableData[4]?.[1] ?? 0 }}
+								onCellInput={handleFechosInput}
+								onCellChange={commitFechosInput}
 							/>
+							{savingFechos && <p className="pts-status">A guardar...</p>}
 							{summaryError && <p className="pts-error" role="alert">{summaryError}</p>}
 						</section>
 					</div>

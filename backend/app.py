@@ -299,6 +299,8 @@ def update_af_cell(filename):
         return jsonify({'error': 'Fecho deve ser Sim ou Não'}), 400
 
     workbook_path = os.path.join(BACKEND_DIR, filename)
+    year_match = re.fullmatch(r'AF_(.+)(\d{4})\.xlsx', filename)
+    fechos_override = None
     with WORKBOOK_LOCK:
         workbook = load_workbook(workbook_path)
         if sheet_name not in workbook.sheetnames:
@@ -310,17 +312,34 @@ def update_af_cell(filename):
             workbook.close()
             return jsonify({'error': 'Célula inválida'}), 400
         cell = worksheet.cell(row=row + 1, column=column + 1)
+        if column == 7 and year_match and year_match.group(1) in AF_MONTHS:
+            year = int(year_match.group(2))
+            month = AF_MONTHS.index(year_match.group(1)) + 1
+            fechos_override = get_af_closure_override(year, month, sheet_name)
+            if fechos_override is not None:
+                fechos_override = max(
+                    0,
+                    fechos_override + int(value == 'Sim') - int(cell.value == 'Sim'),
+                )
         cell.value = value
         temporary_path = f'{workbook_path}.tmp'
         workbook.save(temporary_path)
         os.replace(temporary_path, workbook_path)
         workbook.close()
 
-    year_match = re.fullmatch(r'AF_.+(\d{4})\.xlsx', filename)
-    if year_match:
-        generate_vencimento(year=int(year_match.group(1)))
+        if fechos_override is not None:
+            set_af_closure_override(year, month, sheet_name, fechos_override)
 
-    return jsonify({'sheet': sheet_name, 'row': row, 'column': column, 'value': value})
+    if year_match:
+        generate_vencimento(year=int(year_match.group(2)))
+
+    return jsonify({
+        'sheet': sheet_name,
+        'row': row,
+        'column': column,
+        'value': value,
+        'fechos_override': fechos_override,
+    })
 
 
 @app.get('/api/vencimento-files')
